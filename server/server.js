@@ -1,23 +1,22 @@
-
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const fetch = require('node-fetch');
 
-// 2. INITIALIZE APP (This MUST happen before app.use)
 const app = express();
 
-// 3. MIDDLEWARE
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-// This logger will show you if React is actually hitting the server
+// Logger
 app.use((req, res, next) => {
   console.log(`${req.method} request to ${req.url}`);
   next();
 });
 
-// 4. DATABASE CONNECTION
+// Database connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
@@ -29,36 +28,66 @@ pool.connect((err, client, release) => {
   release();
 });
 
-// 5. SAMPLE ROUTE (To test if 404 goes away)
-// --- REMOVE YOUR OLD app.post('/api/orders') BLOCK AND REPLACE WITH THIS ---
 
-// --- REPLACE YOUR OLD POST ROUTE WITH THIS ---
+// PAYMENT + ORDER ROUTE
 app.post('/api/orders', async (req, res) => {
-  // 1. Added 'payment_method' to the incoming data
-  const { user_id, item_ordered, price, payment_method } = req.body;
+
+  const { user_id, item_ordered, price, payment_method, token } = req.body;
 
   try {
-    // 2. Added 'payment_method' and '$4' to the SQL query
+
+    // 1️⃣ Charge card using Yoco
+    const yocoResponse = await fetch("https://online.yoco.com/v1/charges/", {
+      method: "POST",
+      headers: {
+        "X-Auth-Secret-Key": process.env.YOCO_SECRET_KEY,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        token: token,
+        amountInCents: price * 100,
+        currency: "ZAR"
+      })
+    });
+
+    const paymentData = await yocoResponse.json();
+
+    if (!yocoResponse.ok) {
+      console.error("Payment failed:", paymentData);
+      return res.status(400).json({
+        error: "Payment failed",
+        details: paymentData
+      });
+    }
+
+    console.log("Payment successful");
+
+    // 2️⃣ Save order after payment
     const result = await pool.query(
-      'INSERT INTO orders (user_id, item_ordered, price, payment_method) VALUES ($1, $2, $3, $4) RETURNING id',
+      'INSERT INTO orders (user_id, item_ordered, price, payment_method) VALUES ($1,$2,$3,$4) RETURNING id',
       [user_id, item_ordered, price, payment_method]
     );
 
     const newOrderId = result.rows[0].id;
 
     res.status(201).json({
-      message: "Order placed successfully!",
+      message: "Payment successful and order saved!",
       order: { id: newOrderId }
     });
 
   } catch (err) {
-    console.error("DB Error:", err.message);
-    res.status(500).json({ error: "Database failed to save payment info" });
+
+    console.error("Server error:", err);
+
+    res.status(500).json({
+      error: "Server failed to process payment"
+    });
+
   }
+
 });
 
-// --- END OF UPDATE ---
 
-// 6. START SERVER
-const PORT = 5000;
+// Start server
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
