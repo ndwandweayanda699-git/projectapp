@@ -44,7 +44,7 @@ const App: React.FC = () => {
         } else {
           // Save to Database only if payment succeeds
           try {
-            const response = await fetch('http://localhost:5000/api/orders', {
+            const response = await fetch('https://sizakala.onrender.com', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
