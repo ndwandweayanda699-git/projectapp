@@ -5,8 +5,6 @@ import Input from './components/ui/input';
 const App: React.FC = () => {
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<any[]>([]);
-  // 1. Set Yoco as the only state
-  const [paymentMethod] = useState('Yoco');
 
   const filteredItems = MENU_ITEMS.filter((item) =>
     item.name.toLowerCase().includes(search.toLowerCase())
@@ -20,52 +18,24 @@ const App: React.FC = () => {
     setCart((prevCart) => prevCart.filter((_, i) => i !== index));
   };
 
-  // --- YOCO PAYMENT FUNCTION ---
-  const handlePlaceOrder = async () => {
-    if (cart.length === 0) return alert("Your cart is empty!");
+  // --- UPDATED YOCO REDIRECT FUNCTION ---
+  const handlePlaceOrder = () => {
+    if (cart.length === 0) {
+      alert("Your cart is empty!");
+      return;
+    }
 
     const totalAmount = cart.reduce((sum, item) => sum + item.price, 0);
 
-    // Initialize Yoco
-    // @ts-ignore
-    const yoco = new window.YocoSDK({
-      publicKey: 'pk_test_d902844fJv1Plklc8a74'
-    });
+    // Create a unique reference for the order
+    const orderRef = "Order-" + Date.now();
 
-    // Open Yoco Popup
-    yoco.showPopup({
-      amountInCents: totalAmount * 100,
-      currency: 'ZAR',
-      name: 'Blue Plate Special',
-      description: 'Order Payment',
-      callback: async (result: any) => {
-        if (result.error) {
-          alert("Payment failed: " + result.error.message);
-        } else {
-          // Save to Database only if payment succeeds
-          try {
-            const response = await fetch('https://sizakala.onrender.com', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                user_id: 1,
-                item_ordered: cart.map(i => i.name).join(", "),
-                price: totalAmount,
-                payment_method: 'Yoco'
-              }),
-            });
+    // THIS IS YOUR NEW PERMANENT PAYMENT LINK
+    // We pass the amount and order reference directly to Yoco
+    const paymentUrl = `https://pay.yoco.com{totalAmount}&reference=${orderRef}`;
 
-            if (response.ok) {
-              const data = await response.json();
-              alert("Payment successful! Order ID: " + data.order.id);
-              setCart([]);
-            }
-          } catch (err) {
-            alert("Payment worked, but database failed. Check your server!");
-          }
-        }
-      }
-    });
+    // Redirect the user to the Yoco Secure Payment Page
+    window.location.href = paymentUrl;
   };
 
   return (
@@ -136,7 +106,7 @@ const App: React.FC = () => {
                 <span>R{cart.reduce((total, item) => total + item.price, 0)}</span>
               </div>
 
-              {/* UPDATED PAYMENT BUTTON AREA */}
+              {/* PAYMENT BUTTON */}
               <div className="mt-8 border-t pt-6">
                 <div className="flex items-center gap-3 mb-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
                   <span className="text-xl">💳</span>
@@ -161,4 +131,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
