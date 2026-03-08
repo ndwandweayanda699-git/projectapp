@@ -30,10 +30,9 @@ const App: React.FC = () => {
     // Create a unique reference for the order
     const orderRef = "Order-" + Date.now();
 
-    // THIS IS YOUR NEW PERMANENT PAYMENT LINK
-    // We pass the amount and order reference directly to Yoco
-    const paymentUrl = https://pay.yoco.com<u>**/sizakala?amount=**</u>
-{orderRef};
+    const paymentUrl = `https://pay.yoco.com/sizakala?amount=${totalAmount}&reference=${orderRef}`;
+
+
 
     // Redirect the user to the Yoco Secure Payment Page
     window.location.href = paymentUrl;
