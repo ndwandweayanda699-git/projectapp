@@ -21,7 +21,7 @@
   {
     id: 4,
     name: "Dessert",
-    price: 60,
+    price: 3,
     image: "/dessert.jpg"
   },
   {
