@@ -88,6 +88,30 @@ app.post('/api/orders', async (req, res) => {
 });
 
 
+// 🔽 NEW ROUTE TO FETCH ORDERS
+app.get('/api/orders', async (req, res) => {
+
+  try {
+
+    const result = await pool.query(
+      'SELECT * FROM orders ORDER BY id DESC'
+    );
+
+    res.json(result.rows);
+
+  } catch (err) {
+
+    console.error("Error fetching orders:", err);
+
+    res.status(500).json({
+      error: "Failed to fetch orders"
+    });
+
+  }
+
+});
+
+
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
