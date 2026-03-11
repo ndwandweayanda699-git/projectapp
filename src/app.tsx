@@ -33,7 +33,7 @@ const App: React.FC = () => {
 
     try {
 
-      const response = await fetch("https://projectapp-sk4p.onrender.com/api/orders", {
+      fetch("https://projectapp-backend-u0fx.onrender.com/api/orders", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
