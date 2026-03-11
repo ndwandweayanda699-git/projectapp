@@ -33,7 +33,7 @@ const App: React.FC = () => {
 
     try {
 
-      await fetch("https://projectapp-sk4p.onrender.com/api/orders", {
+      const response = await fetch("https://projectapp-sk4p.onrender.com/api/orders", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -42,23 +42,26 @@ const App: React.FC = () => {
           user_id: 1,
           item_ordered: itemOrdered,
           price: totalAmount,
-          payment_method: "card",
-          token: "tok_test"
+          payment_method: "yoco"
         })
       });
 
-      console.log("Order saved");
+      const data = await response.json();
+
+      console.log("Order saved:", data);
+
+      // Redirect AFTER order is saved
+      const paymentUrl = `https://pay.yoco.com/sizakala?amount=${totalAmount}&reference=${orderRef}`;
+
+      window.location.href = paymentUrl;
 
     } catch (error) {
 
       console.error("Order save failed", error);
+      alert("Order failed. Please try again.");
 
     }
 
-    // Redirect to Yoco payment page
-    const paymentUrl = `https://pay.yoco.com/sizakala?amount=${totalAmount}&reference=${orderRef}`;
-
-    window.location.href = paymentUrl;
   };
 
   return (

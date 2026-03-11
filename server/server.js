@@ -29,38 +29,36 @@ pool.connect((err, client, release) => {
 });
 
 
-// PAYMENT + ORDER ROUTE
-app.post('/api/orders', async (req, res) => {
 
-  const { user_id, item_ordered, price, payment_method, token } = req.body;
+
+    // 1️⃣ Charge card using Yoco
+   app.post('/api/orders', async (req, res) => {
+
+  const { user_id, item_ordered, price, payment_method } = req.body;
 
   try {
 
-    // 1️⃣ Charge card using Yoco
-    const yocoResponse = await fetch("https://online.yoco.com/v1/charges/", {
-      method: "POST",
-      headers: {
-        "X-Auth-Secret-Key": process.env.YOCO_SECRET_KEY,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        token: token,
-        amountInCents: price * 100,
-        currency: "ZAR"
-      })
+    const result = await pool.query(
+      'INSERT INTO orders (user_id, item_ordered, price, payment_method) VALUES ($1,$2,$3,$4) RETURNING id',
+      [user_id, item_ordered, price, payment_method]
+    );
+
+    res.status(201).json({
+      message: "Order saved",
+      order: result.rows[0]
     });
 
-    const paymentData = await yocoResponse.json();
+  } catch (err) {
 
-    if (!yocoResponse.ok) {
-      console.error("Payment failed:", paymentData);
-      return res.status(400).json({
-        error: "Payment failed",
-        details: paymentData
-      });
-    }
+    console.error(err);
 
-    console.log("Payment successful");
+    res.status(500).json({
+      error: "Failed to save order"
+    });
+
+  }
+
+});
 
     // 2️⃣ Save order after payment
     const result = await pool.query(
