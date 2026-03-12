@@ -1,4 +1,5 @@
-require('dotenv').config();
+require('dotenv').config(); // load environment variables
+
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -15,7 +16,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Database connection (Neon)
+// Database connection (Neon PostgreSQL)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
@@ -31,7 +32,10 @@ pool.connect((err, client, release) => {
 });
 
 
-// SAVE ORDER
+// ==============================
+// CREATE ORDER (PAYMENT PENDING)
+// ==============================
+
 app.post('/api/orders', async (req, res) => {
 
   const { user_id, item_ordered, price, payment_method } = req.body;
@@ -39,12 +43,14 @@ app.post('/api/orders', async (req, res) => {
   try {
 
     const result = await pool.query(
-      'INSERT INTO orders (user_id, item_ordered, price, payment_method) VALUES ($1,$2,$3,$4) RETURNING *',
+      `INSERT INTO orders (user_id, item_ordered, price, payment_method, payment_status)
+       VALUES ($1,$2,$3,$4,'pending')
+       RETURNING *`,
       [user_id, item_ordered, price, payment_method]
     );
 
     res.status(201).json({
-      message: "Order saved successfully",
+      message: "Order created (awaiting payment)",
       order: result.rows[0]
     });
 
@@ -53,7 +59,7 @@ app.post('/api/orders', async (req, res) => {
     console.error("Database error:", err);
 
     res.status(500).json({
-      error: "Failed to save order"
+      error: "Failed to create order"
     });
 
   }
@@ -61,13 +67,54 @@ app.post('/api/orders', async (req, res) => {
 });
 
 
-// FETCH ALL ORDERS
+// ==============================
+// CONFIRM PAYMENT
+// ==============================
+
+app.post('/api/confirm-payment', async (req, res) => {
+
+  const { order_id } = req.body;
+
+  try {
+
+    const result = await pool.query(
+      `UPDATE orders
+       SET payment_status='paid'
+       WHERE id=$1
+       RETURNING *`,
+      [order_id]
+    );
+
+    res.json({
+      message: "Payment confirmed",
+      order: result.rows[0]
+    });
+
+  } catch (err) {
+
+    console.error("Payment confirmation error:", err);
+
+    res.status(500).json({
+      error: "Payment confirmation failed"
+    });
+
+  }
+
+});
+
+
+// ==============================
+// FETCH PAID ORDERS ONLY
+// ==============================
+
 app.get('/api/orders', async (req, res) => {
 
   try {
 
     const result = await pool.query(
-      'SELECT * FROM orders ORDER BY id DESC'
+      `SELECT * FROM orders
+       WHERE payment_status='paid'
+       ORDER BY id DESC`
     );
 
     res.json(result.rows);
@@ -85,7 +132,10 @@ app.get('/api/orders', async (req, res) => {
 });
 
 
-// Start server
+// ==============================
+// SERVER START
+// ==============================
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {

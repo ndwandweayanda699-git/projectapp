@@ -49,8 +49,9 @@ const App: React.FC = () => {
 
       console.log("Order saved:", data);
 
-      const paymentUrl = `https://pay.yoco.com/sizakala?amount=${totalAmount}&reference=${orderRef}`;
+      const paymentUrl = `https://pay.yoco.com/sizakala?amount=${totalAmount}&reference=${orderRef}&success_url=https://projectapp-sk4p.onrender.com/success`;
 
+      // Redirect user to payment
       window.location.href = paymentUrl;
 
     } catch (error) {
