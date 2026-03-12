@@ -19,7 +19,6 @@ const App: React.FC = () => {
     setCart((prevCart) => prevCart.filter((_, i) => i !== index));
   };
 
-  // UPDATED ORDER + PAYMENT FUNCTION
   const handlePlaceOrder = async () => {
 
     if (cart.length === 0) {
@@ -33,7 +32,7 @@ const App: React.FC = () => {
 
     try {
 
-      fetch("https://projectapp-backend-u0fx.onrender.com/api/orders", {
+      const response = await fetch("https://projectapp-backend-u0fx.onrender.com/api/orders", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -50,7 +49,6 @@ const App: React.FC = () => {
 
       console.log("Order saved:", data);
 
-      // Redirect AFTER order is saved
       const paymentUrl = `https://pay.yoco.com/sizakala?amount=${totalAmount}&reference=${orderRef}`;
 
       window.location.href = paymentUrl;
@@ -90,8 +88,6 @@ const App: React.FC = () => {
           />
 
         </div>
-
-        {/* MENU GRID */}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
 
@@ -136,8 +132,6 @@ const App: React.FC = () => {
           ))}
 
         </div>
-
-        {/* CART */}
 
         <div className="mt-16 bg-white p-6 rounded-2xl shadow-md border border-slate-200 max-w-2xl mx-auto">
 
@@ -194,8 +188,6 @@ const App: React.FC = () => {
                 </span>
 
               </div>
-
-              {/* PAYMENT */}
 
               <div className="mt-8 border-t pt-6">
 
