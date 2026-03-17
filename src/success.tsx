@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 
 export default function Success() {
 
@@ -18,7 +18,7 @@ export default function Success() {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        order_id: Number(orderId) // convert string → number
+        order_id: Number(orderId)
       })
     })
     .then(async (res) => {
