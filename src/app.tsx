@@ -1,3 +1,4 @@
+```tsx
 import React, { useState } from 'react';
 import { MENU_ITEMS } from './lib/datasource';
 import Input from './components/ui/input';
@@ -32,6 +33,7 @@ const App: React.FC = () => {
 
     try {
 
+      // SAVE ORDER IN DATABASE FIRST
       const response = await fetch("https://projectapp-backend-u0fx.onrender.com/api/orders", {
         method: "POST",
         headers: {
@@ -45,19 +47,31 @@ const App: React.FC = () => {
         })
       });
 
+      if (!response.ok) {
+        throw new Error("Server error while saving order");
+      }
+
       const data = await response.json();
 
       console.log("Order saved:", data);
 
-      // IMPORTANT: get order id from backend
-      const orderId = data.order.id;
+      // GET ORDER ID FROM BACKEND
+      const orderId = data?.order?.id;
 
-      // Create success URL WITH order id
+      if (!orderId) {
+        alert("Order ID not returned from server");
+        return;
+      }
+
+      // SUCCESS PAGE WITH ORDER ID
       const successUrl = `https://projectapp-sk4p.onrender.com/success?order_id=${orderId}`;
 
+      // YOCO PAYMENT URL
       const paymentUrl = `https://pay.yoco.com/sizakala?amount=${totalAmount}&reference=${orderRef}&success_url=${encodeURIComponent(successUrl)}`;
 
-      // Redirect user to payment
+      console.log("Redirecting to payment:", paymentUrl);
+
+      // REDIRECT TO YOCO PAYMENT
       window.location.href = paymentUrl;
 
     } catch (error) {
@@ -234,3 +248,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+```
