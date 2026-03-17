@@ -15,7 +15,7 @@
   {
     id: 3,
     name: "Chips",
-    price: 2,
+    price: 0.5,
     image: "/chips.jpg"
   },
   {
