@@ -1,4 +1,3 @@
-```tsx
 import React, { useState } from 'react';
 import { MENU_ITEMS } from './lib/datasource';
 import Input from './components/ui/input';
@@ -64,14 +63,20 @@ const App: React.FC = () => {
       }
 
       // SUCCESS PAGE WITH ORDER ID
-      const successUrl = `https://projectapp-sk4p.onrender.com/success?order_id=${orderId}`;
+      const successUrl = "https://projectapp-sk4p.onrender.com/success?order_id=" + orderId;
 
-      // YOCO PAYMENT URL
-      const paymentUrl = `https://pay.yoco.com/sizakala?amount=${totalAmount}&reference=${orderRef}&success_url=${encodeURIComponent(successUrl)}`;
+      // YOCO PAYMENT URL (SAFE VERSION)
+      const paymentUrl =
+        "https://pay.yoco.com/sizakala?amount=" +
+        totalAmount +
+        "&reference=" +
+        orderRef +
+        "&success_url=" +
+        encodeURIComponent(successUrl);
 
       console.log("Redirecting to payment:", paymentUrl);
 
-      // REDIRECT TO YOCO PAYMENT
+      // REDIRECT USER TO PAYMENT
       window.location.href = paymentUrl;
 
     } catch (error) {
@@ -248,4 +253,4 @@ const App: React.FC = () => {
 };
 
 export default App;
-```
+
