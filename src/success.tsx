@@ -7,22 +7,32 @@ export default function Success() {
     const params = new URLSearchParams(window.location.search);
     const orderId = params.get("order_id");
 
-    if (orderId) {
-
-      fetch("https://projectapp-backend-u0fx.onrender.com/api/confirm-payment", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          order_id: orderId
-        })
-      })
-      .then(res => res.json())
-      .then(data => console.log("Payment confirmed:", data))
-      .catch(err => console.error(err));
-
+    if (!orderId) {
+      console.error("No order_id found in URL");
+      return;
     }
+
+    fetch("https://projectapp-backend-u0fx.onrender.com/api/confirm-payment", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        order_id: Number(orderId) // convert string → number
+      })
+    })
+    .then(async (res) => {
+      if (!res.ok) {
+        throw new Error("Failed to confirm payment");
+      }
+      return res.json();
+    })
+    .then((data) => {
+      console.log("Payment confirmed:", data);
+    })
+    .catch((err) => {
+      console.error("Payment confirmation error:", err);
+    });
 
   }, []);
 
