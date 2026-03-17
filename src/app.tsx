@@ -60,19 +60,20 @@ const App: React.FC = () => {
         return;
       }
 
-      // SUCCESS URL
+      // SUCCESS URL (optional now)
       const successUrl = `https://projectapp-sk4p.onrender.com/success?order_id=${orderId}`;
 
-      // ✅ FIXED YOCO PAYMENT URL
+      // ✅ FINAL YOCO PAYMENT URL (WITH METADATA)
       const paymentUrl =
         `https://pay.yoco.com/sizakala?amount=${totalAmount}` +
         `&reference=${orderRef}` +
+        `&metadata[order_id]=${orderId}` +   // 🔥 THIS IS THE FIX
         `&successUrl=${encodeURIComponent(successUrl)}` +
         `&cancelUrl=${encodeURIComponent(successUrl)}`;
 
       console.log("Redirecting to payment:", paymentUrl);
 
-      // REDIRECT
+      // REDIRECT TO YOCO
       window.location.href = paymentUrl;
 
     } catch (error) {
@@ -200,4 +201,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-

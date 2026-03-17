@@ -6,7 +6,10 @@ const { Pool } = require('pg');
 
 const app = express();
 
-// Middleware
+// ==============================
+// MIDDLEWARE
+// ==============================
+
 app.use(cors());
 app.use(express.json());
 
@@ -16,7 +19,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Database connection (Neon PostgreSQL)
+// ==============================
+// DATABASE CONNECTION (Neon)
+// ==============================
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
@@ -27,13 +33,13 @@ pool.connect((err, client, release) => {
   if (err) {
     return console.error('DB Connection Error:', err.stack);
   }
-  console.log('Connected to Neon PostgreSQL');
+  console.log('✅ Connected to Neon PostgreSQL');
   release();
 });
 
 
 // ==============================
-// CREATE ORDER (PAYMENT PENDING)
+// CREATE ORDER (PENDING)
 // ==============================
 
 app.post('/api/orders', async (req, res) => {
@@ -68,7 +74,54 @@ app.post('/api/orders', async (req, res) => {
 
 
 // ==============================
-// CONFIRM PAYMENT
+// 🔥 YOCO WEBHOOK (MAIN FIX)
+// ==============================
+
+app.post('/webhook/yoco', async (req, res) => {
+
+  try {
+
+    const event = req.body;
+
+    console.log("🔥 Webhook received:", JSON.stringify(event, null, 2));
+
+    // Only act on successful payments
+    if (event.type === "payment.succeeded") {
+
+      const orderId = event.metadata?.order_id;
+
+      if (!orderId) {
+        console.log("❌ No order_id in metadata");
+        return res.sendStatus(200);
+      }
+
+      const result = await pool.query(
+        `UPDATE orders
+         SET payment_status = 'paid'
+         WHERE id = $1
+         AND payment_status = 'pending'
+         RETURNING *`,
+        [orderId]
+      );
+
+      console.log("✅ Order marked as PAID:", result.rows[0]);
+
+    }
+
+    res.sendStatus(200);
+
+  } catch (err) {
+
+    console.error("❌ Webhook error:", err);
+    res.sendStatus(500);
+
+  }
+
+});
+
+
+// ==============================
+// CONFIRM PAYMENT (OPTIONAL NOW)
 // ==============================
 
 app.post('/api/confirm-payment', async (req, res) => {
@@ -105,7 +158,7 @@ app.post('/api/confirm-payment', async (req, res) => {
 
 
 // ==============================
-// FETCH PAID ORDERS ONLY
+// FETCH PAID ORDERS
 // ==============================
 
 app.get('/api/orders', async (req, res) => {
@@ -140,5 +193,5 @@ app.get('/api/orders', async (req, res) => {
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
