@@ -79,8 +79,9 @@ app.post('/api/confirm-payment', async (req, res) => {
 
     const result = await pool.query(
       `UPDATE orders
-       SET payment_status='paid'
-       WHERE id=$1
+       SET payment_status = 'paid'
+       WHERE id = $1
+       AND payment_status = 'pending'
        RETURNING *`,
       [order_id]
     );
@@ -113,7 +114,7 @@ app.get('/api/orders', async (req, res) => {
 
     const result = await pool.query(
       `SELECT * FROM orders
-       WHERE payment_status='paid'
+       WHERE payment_status = 'paid'
        ORDER BY id DESC`
     );
 
