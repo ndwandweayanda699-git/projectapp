@@ -15,11 +15,15 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "sizakala123";
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 
 // ==============================
-// MIDDLEWARE
+// 🚨 MIDDLEWARE (YOCO FIX)
 // ==============================
 
-app.use(cors());
+// 🔥 RAW body ONLY for webhook
+app.use('/webhook/yoco', express.raw({ type: '*/*' }));
+
+// Normal middleware
 app.use(express.json());
+app.use(cors());
 
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
@@ -31,11 +35,10 @@ app.use((req, res, next) => {
 // ==============================
 
 const verifyAdmin = (req, res, next) => {
-
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
-    return res.status(401).json({ error: "No token provided" });
+    return res.status(401).json({ error: "No token" });
   }
 
   const token = authHeader.split(" ")[1];
@@ -43,10 +46,9 @@ const verifyAdmin = (req, res, next) => {
   try {
     jwt.verify(token, JWT_SECRET);
     next();
-  } catch (err) {
+  } catch {
     return res.status(403).json({ error: "Invalid token" });
   }
-
 };
 
 // ==============================
@@ -54,29 +56,19 @@ const verifyAdmin = (req, res, next) => {
 // ==============================
 
 app.post("/api/admin/login", (req, res) => {
-
   const { password } = req.body;
 
-  if (!password) {
-    return res.status(400).json({ error: "Password required" });
-  }
-
   if (password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: "Invalid password" });
+    return res.status(401).json({ error: "Wrong password" });
   }
 
-  const token = jwt.sign(
-    { role: "admin" },
-    JWT_SECRET,
-    { expiresIn: "2h" }
-  );
+  const token = jwt.sign({ role: "admin" }, JWT_SECRET, { expiresIn: "2h" });
 
   res.json({ token });
-
 });
 
 // ==============================
-// DATABASE CONNECTION (Neon)
+// DATABASE (NEON)
 // ==============================
 
 const pool = new Pool({
@@ -84,17 +76,8 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-pool.connect((err, client, release) => {
-  if (err) {
-    console.error('❌ DB Connection Error:', err.stack);
-  } else {
-    console.log('✅ Connected to Neon PostgreSQL');
-    release();
-  }
-});
-
 // ==============================
-// 🟢 CREATE ORDER (PUBLIC)
+// 🟢 CREATE ORDER
 // ==============================
 
 app.post('/api/orders', async (req, res) => {
@@ -106,29 +89,27 @@ app.post('/api/orders', async (req, res) => {
     payment_method,
     address,
     phone,
-    delivery_type // ✅ NEW
+    delivery_type
   } = req.body;
 
-  // ✅ BASIC VALIDATION
   if (!user_id || !item_ordered || !price || !payment_method || !phone) {
-    return res.status(400).json({ error: "Missing required fields" });
+    return res.status(400).json({ error: "Missing fields" });
   }
 
-  // ✅ DELIVERY RULE
   if (delivery_type === "delivery" && !address) {
-    return res.status(400).json({ error: "Address required for delivery" });
+    return res.status(400).json({ error: "Address required" });
   }
 
-  // ✅ DEFAULTS
-  const finalAddress = delivery_type === "collection" ? "COLLECTION" : address || "COLLECTION";
+  const finalAddress =
+    delivery_type === "collection" ? "COLLECTION" : address || "COLLECTION";
+
   const finalDeliveryType = delivery_type || "collection";
 
   try {
-
     const result = await pool.query(
       `INSERT INTO orders
-      (user_id, item_ordered, price, payment_method, payment_status, address, phone, delivery_status, delivery_type)
-      VALUES ($1,$2,$3,$4,'pending',$5,$6,'pending',$7)
+      (user_id, item_ordered, price, payment_method, payment_status, address, phone, delivery_status, delivery_type, created_at)
+      VALUES ($1,$2,$3,$4,'pending',$5,$6,'pending',$7,NOW())
       RETURNING *`,
       [
         user_id,
@@ -141,14 +122,11 @@ app.post('/api/orders', async (req, res) => {
       ]
     );
 
-    res.status(201).json({
-      message: "Order created (awaiting payment)",
-      order: result.rows[0]
-    });
+    res.json({ order: result.rows[0] });
 
   } catch (err) {
-    console.error("❌ Create order error:", err);
-    res.status(500).json({ error: "Failed to create order" });
+    console.error(err);
+    res.status(500).json({ error: "Create failed" });
   }
 });
 
@@ -160,7 +138,7 @@ app.post('/webhook/yoco', async (req, res) => {
 
   try {
 
-    const event = req.body;
+    const event = JSON.parse(req.body.toString());
 
     console.log("🔥 Webhook:", event.type);
 
@@ -168,97 +146,102 @@ app.post('/webhook/yoco', async (req, res) => {
 
       const orderId = event.metadata?.order_id;
 
-      if (!orderId) {
-        console.log("⚠️ Missing order_id");
-        return res.sendStatus(200);
-      }
-
-      const result = await pool.query(
+      await pool.query(
         `UPDATE orders
-         SET payment_status = 'paid'
-         WHERE id = $1
-         AND payment_status = 'pending'
-         RETURNING *`,
+         SET payment_status='paid'
+         WHERE id=$1`,
         [orderId]
       );
 
-      if (result.rows.length > 0) {
-        console.log("✅ Paid:", result.rows[0].id);
-      } else {
-        console.log("⚠️ Already updated or not found");
-      }
+      console.log("✅ Paid:", orderId);
     }
 
     res.sendStatus(200);
 
   } catch (err) {
-    console.error("❌ Webhook error:", err);
+    console.error(err);
     res.sendStatus(500);
   }
-
 });
 
 // ==============================
-// 🔐 GET ALL ORDERS (PROTECTED)
+// 🔐 GET ORDERS
 // ==============================
 
 app.get('/api/orders', verifyAdmin, async (req, res) => {
 
-  try {
+  const result = await pool.query(
+    `SELECT * FROM orders ORDER BY id DESC`
+  );
 
-    const result = await pool.query(
-      `SELECT * FROM orders ORDER BY id DESC`
-    );
-
-    res.json(result.rows);
-
-  } catch (err) {
-    console.error("❌ Fetch orders error:", err);
-    res.status(500).json({ error: "Failed to fetch orders" });
-  }
-
+  res.json(result.rows);
 });
 
 // ==============================
-// 🔐 UPDATE DELIVERY (PROTECTED)
+// 🔐 UPDATE DELIVERY
 // ==============================
 
 app.post('/api/update-delivery', verifyAdmin, async (req, res) => {
 
   const { order_id, status } = req.body;
 
-  if (!order_id || !status) {
-    return res.status(400).json({ error: "Missing order_id or status" });
-  }
+  const result = await pool.query(
+    `UPDATE orders
+     SET delivery_status=$1
+     WHERE id=$2
+     RETURNING *`,
+    [status, order_id]
+  );
 
-  try {
-
-    const result = await pool.query(
-      `UPDATE orders
-       SET delivery_status = $1
-       WHERE id = $2
-       RETURNING *`,
-      [status, order_id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    res.json({
-      message: "Delivery updated",
-      order: result.rows[0]
-    });
-
-  } catch (err) {
-    console.error("❌ Delivery error:", err);
-    res.status(500).json({ error: "Failed to update delivery" });
-  }
-
+  res.json(result.rows[0]);
 });
 
 // ==============================
-// ❤️ HEALTH CHECK
+// 🔐 DELETE ORDER (MANUAL)
+// ==============================
+
+app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
+
+  const { id } = req.params;
+
+  await pool.query(`DELETE FROM orders WHERE id=$1`, [id]);
+
+  res.json({ message: "Deleted" });
+});
+
+// ==============================
+// 📦 ARCHIVE OLD ORDERS
+// ==============================
+
+const archiveOldOrders = async () => {
+  try {
+    console.log("🕒 Running archive job...");
+
+    // move old orders to archive table
+    await pool.query(`
+      INSERT INTO orders_archive
+      SELECT * FROM orders
+      WHERE created_at < NOW() - INTERVAL '24 hours'
+    `);
+
+    // delete from main table
+    await pool.query(`
+      DELETE FROM orders
+      WHERE created_at < NOW() - INTERVAL '24 hours'
+    `);
+
+    console.log("✅ Archive complete");
+
+  } catch (err) {
+    console.error("❌ Archive error:", err);
+  }
+};
+
+// run every hour
+setInterval(archiveOldOrders, 60 * 60 * 1000);
+
+// ==============================
+// HEALTH
 // ==============================
 
 app.get('/', (req, res) => {
@@ -266,11 +249,11 @@ app.get('/', (req, res) => {
 });
 
 // ==============================
-// 🚀 SERVER START
+// START SERVER
 // ==============================
 
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Running on ${PORT}`);
 });
