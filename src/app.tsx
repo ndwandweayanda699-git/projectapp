@@ -1,11 +1,18 @@
 import React, { useState } from 'react';
 import { MENU_ITEMS } from './lib/datasource';
 import Input from './components/ui/input';
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Manager from "./pages/Manager";
 
-const App: React.FC = () => {
+// ==============================
+// 🟢 MAIN APP UI (UNCHANGED LOGIC)
+// ==============================
+
+const MainApp: React.FC = () => {
 
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<any[]>([]);
+  const [address, setAddress] = useState("");
 
   const filteredItems = MENU_ITEMS.filter((item) =>
     item.name.toLowerCase().includes(search.toLowerCase())
@@ -26,13 +33,17 @@ const App: React.FC = () => {
       return;
     }
 
+    if (!address.trim()) {
+      alert("Please enter delivery address!");
+      return;
+    }
+
     const totalAmount = cart.reduce((sum, item) => sum + item.price, 0);
     const orderRef = "Order-" + Date.now();
     const itemOrdered = cart.map((item) => item.name).join(", ");
 
     try {
 
-      // SAVE ORDER IN DATABASE
       const response = await fetch("https://projectapp-backend-u0fx.onrender.com/api/orders", {
         method: "POST",
         headers: {
@@ -42,7 +53,8 @@ const App: React.FC = () => {
           user_id: 1,
           item_ordered: itemOrdered,
           price: totalAmount,
-          payment_method: "yoco"
+          payment_method: "yoco",
+          address: address
         })
       });
 
@@ -51,152 +63,124 @@ const App: React.FC = () => {
       }
 
       const data = await response.json();
-      console.log("Order saved:", data);
-
       const orderId = data?.order?.id;
 
       if (!orderId) {
-        alert("Order ID not returned from server");
+        alert("Order ID not returned");
         return;
       }
 
-      // SUCCESS URL (optional now)
       const successUrl = `https://projectapp-sk4p.onrender.com/success?order_id=${orderId}`;
 
-      // ✅ FINAL YOCO PAYMENT URL (WITH METADATA)
       const paymentUrl =
         `https://pay.yoco.com/sizakala?amount=${totalAmount}` +
         `&reference=${orderRef}` +
-        `&metadata[order_id]=${orderId}` +   // 🔥 THIS IS THE FIX
+        `&metadata[order_id]=${orderId}` +
         `&successUrl=${encodeURIComponent(successUrl)}` +
         `&cancelUrl=${encodeURIComponent(successUrl)}`;
 
-      console.log("Redirecting to payment:", paymentUrl);
-
-      // REDIRECT TO YOCO
       window.location.href = paymentUrl;
 
     } catch (error) {
-      console.error("Order save failed", error);
-      alert("Order failed. Please try again.");
+      console.error(error);
+      alert("Order failed");
     }
-
   };
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
 
-      <header className="py-16 px-4 text-center bg-white border-b border-slate-100 shadow-sm mb-10">
-        <h1 className="text-4xl md:text-5xl font-black tracking-tight text-slate-900">
+      <header className="py-16 px-4 text-center bg-white border-b shadow-sm mb-10">
+        <h1 className="text-4xl font-black">
           Blue <span className="text-blue-600">Plate</span> Special
         </h1>
-
-        <p className="mt-4 text-slate-500 text-lg max-w-md mx-auto">
-          Premium dining, delivered with precision.
-        </p>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 pb-20">
 
+        {/* SEARCH */}
         <div className="flex justify-center mb-10">
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search for food or drinks..."
+            placeholder="Search food..."
           />
         </div>
 
+        {/* MENU */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredItems.map((item) => (
-            <div
-              key={item.id}
-              className="group bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden"
-            >
-              <div className="relative h-64 overflow-hidden">
-                <img
-                  src={item.image}
-                  alt={item.name}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                />
+            <div key={item.id} className="bg-white p-4 rounded-xl shadow">
 
-                <div className="absolute top-4 right-4 bg-blue-600 text-white px-4 py-1 rounded-full font-bold shadow-lg">
-                  R{item.price}
-                </div>
-              </div>
+              <img src={item.image} className="w-full h-48 object-cover rounded-lg" />
 
-              <div className="p-6">
-                <h3 className="text-2xl font-bold text-slate-800 mb-2">
-                  {item.name}
-                </h3>
+              <h3 className="text-xl font-bold mt-3">{item.name}</h3>
+              <p>R{item.price}</p>
 
-                <button
-                  onClick={() => addToCart(item)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-100"
-                >
-                  Add to Cart
-                </button>
-              </div>
+              <button
+                onClick={() => addToCart(item)}
+                className="mt-3 w-full bg-blue-600 text-white p-3 rounded"
+              >
+                Add to Cart
+              </button>
+
             </div>
           ))}
         </div>
 
-        <div className="mt-16 bg-white p-6 rounded-2xl shadow-md border border-slate-200 max-w-2xl mx-auto">
+        {/* CART */}
+        <div className="mt-16 bg-white p-6 rounded-xl shadow max-w-2xl mx-auto">
 
-          <h2 className="text-2xl font-bold mb-4 text-center">
-            🛒 Your Cart
-          </h2>
+          <h2 className="text-xl font-bold mb-4">Cart</h2>
 
-          {cart.length === 0 ? (
-            <p className="text-slate-500 text-center py-10">
-              Your cart is empty.
-            </p>
-          ) : (
-            <>
-              {cart.map((item, index) => (
-                <div key={index} className="flex justify-between items-center border-b py-3">
-                  <div>
-                    <p className="font-semibold">{item.name}</p>
-                    <p className="text-sm text-slate-500">R{item.price}</p>
-                  </div>
+          {cart.map((item, index) => (
+            <div key={index} className="flex justify-between mb-2">
+              <span>{item.name}</span>
+              <button onClick={() => removeFromCart(index)}>Remove</button>
+            </div>
+          ))}
 
-                  <button
-                    onClick={() => removeFromCart(index)}
-                    className="bg-red-500 text-white px-3 py-1 rounded-lg"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
+          {/* TOTAL */}
+          <p className="mt-4 font-bold">
+            Total: R{cart.reduce((t, i) => t + i.price, 0)}
+          </p>
 
-              <div className="mt-6 flex justify-between items-center font-bold text-xl px-2">
-                <span>Total:</span>
-                <span>
-                  R{cart.reduce((total, item) => total + item.price, 0)}
-                </span>
-              </div>
+          {/* ADDRESS */}
+          <input
+            type="text"
+            placeholder="Delivery address"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            className="w-full mt-4 p-3 border rounded"
+          />
 
-              <div className="mt-8 border-t pt-6">
-                <div className="flex items-center gap-3 mb-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
-                  <span className="text-xl">💳</span>
-                  <p className="text-sm font-bold text-blue-800">
-                    Secure Payment via Yoco (Card/EFT)
-                  </p>
-                </div>
-
-                <button
-                  onClick={handlePlaceOrder}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-black py-5 rounded-2xl shadow-xl transition-all active:scale-95 uppercase tracking-widest"
-                >
-                  Pay R{cart.reduce((total, item) => total + item.price, 0)} & Place Order
-                </button>
-              </div>
-            </>
-          )}
+          {/* PAY */}
+          <button
+            onClick={handlePlaceOrder}
+            className="mt-4 w-full bg-green-600 text-white p-4 rounded"
+          >
+            Pay & Order
+          </button>
 
         </div>
 
       </main>
     </div>
+  );
+};
+
+// ==============================
+// 🔥 ROUTER (THIS WAS MISSING)
+// ==============================
+
+const App: React.FC = () => {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<MainApp />} />
+        <Route path="/manager" element={<Manager />} />
+      </Routes>
+    </Router>
   );
 };
 

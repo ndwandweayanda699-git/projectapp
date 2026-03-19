@@ -1,4 +1,4 @@
-require('dotenv').config(); // load environment variables
+require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
@@ -13,9 +13,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Logger
 app.use((req, res, next) => {
-  console.log(`${req.method} request to ${req.url}`);
+  console.log(`${req.method} ${req.url}`);
   next();
 });
 
@@ -28,31 +27,37 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Test DB connection
+// Test connection
 pool.connect((err, client, release) => {
   if (err) {
-    return console.error('DB Connection Error:', err.stack);
+    console.error('❌ DB Connection Error:', err.stack);
+  } else {
+    console.log('✅ Connected to Neon PostgreSQL');
+    release();
   }
-  console.log('✅ Connected to Neon PostgreSQL');
-  release();
 });
 
-
 // ==============================
-// CREATE ORDER (PENDING)
+// CREATE ORDER (WITH DELIVERY)
 // ==============================
 
 app.post('/api/orders', async (req, res) => {
 
-  const { user_id, item_ordered, price, payment_method } = req.body;
+  const { user_id, item_ordered, price, payment_method, address } = req.body;
+
+  // 🔒 Basic validation
+  if (!user_id || !item_ordered || !price || !payment_method || !address) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
 
   try {
 
     const result = await pool.query(
-      `INSERT INTO orders (user_id, item_ordered, price, payment_method, payment_status)
-       VALUES ($1,$2,$3,$4,'pending')
-       RETURNING *`,
-      [user_id, item_ordered, price, payment_method]
+      `INSERT INTO orders
+      (user_id, item_ordered, price, payment_method, payment_status, address, delivery_status)
+      VALUES ($1,$2,$3,$4,'pending',$5,'pending')
+      RETURNING *`,
+      [user_id, item_ordered, price, payment_method, address]
     );
 
     res.status(201).json({
@@ -61,20 +66,13 @@ app.post('/api/orders', async (req, res) => {
     });
 
   } catch (err) {
-
-    console.error("Database error:", err);
-
-    res.status(500).json({
-      error: "Failed to create order"
-    });
-
+    console.error("❌ Create order error:", err);
+    res.status(500).json({ error: "Failed to create order" });
   }
-
 });
 
-
 // ==============================
-// 🔥 YOCO WEBHOOK (MAIN FIX)
+// YOCO WEBHOOK (PAYMENT SUCCESS)
 // ==============================
 
 app.post('/webhook/yoco', async (req, res) => {
@@ -83,18 +81,18 @@ app.post('/webhook/yoco', async (req, res) => {
 
     const event = req.body;
 
-    console.log("🔥 Webhook received:", JSON.stringify(event, null, 2));
+    console.log("🔥 Webhook received:", event.type);
 
-    // Only act on successful payments
     if (event.type === "payment.succeeded") {
 
       const orderId = event.metadata?.order_id;
 
       if (!orderId) {
-        console.log("❌ No order_id in metadata");
+        console.log("⚠️ No order_id in metadata");
         return res.sendStatus(200);
       }
 
+      // ✅ Prevent double updates
       const result = await pool.query(
         `UPDATE orders
          SET payment_status = 'paid'
@@ -104,64 +102,48 @@ app.post('/webhook/yoco', async (req, res) => {
         [orderId]
       );
 
-      console.log("✅ Order marked as PAID:", result.rows[0]);
-
+      if (result.rows.length > 0) {
+        console.log("✅ Order marked as PAID:", result.rows[0].id);
+      } else {
+        console.log("⚠️ Order already updated or not found");
+      }
     }
 
     res.sendStatus(200);
 
   } catch (err) {
-
     console.error("❌ Webhook error:", err);
     res.sendStatus(500);
-
   }
 
 });
 
-
 // ==============================
-// CONFIRM PAYMENT (OPTIONAL NOW)
+// FETCH ALL ORDERS (MANAGER)
 // ==============================
 
-app.post('/api/confirm-payment', async (req, res) => {
-
-  const { order_id } = req.body;
+app.get('/api/orders', async (req, res) => {
 
   try {
 
     const result = await pool.query(
-      `UPDATE orders
-       SET payment_status = 'paid'
-       WHERE id = $1
-       AND payment_status = 'pending'
-       RETURNING *`,
-      [order_id]
+      `SELECT * FROM orders ORDER BY id DESC`
     );
 
-    res.json({
-      message: "Payment confirmed",
-      order: result.rows[0]
-    });
+    res.json(result.rows);
 
   } catch (err) {
-
-    console.error("Payment confirmation error:", err);
-
-    res.status(500).json({
-      error: "Payment confirmation failed"
-    });
-
+    console.error("❌ Fetch orders error:", err);
+    res.status(500).json({ error: "Failed to fetch orders" });
   }
 
 });
 
-
 // ==============================
-// FETCH PAID ORDERS
+// FETCH ONLY PAID ORDERS
 // ==============================
 
-app.get('/api/orders', async (req, res) => {
+app.get('/api/orders/paid', async (req, res) => {
 
   try {
 
@@ -174,17 +156,57 @@ app.get('/api/orders', async (req, res) => {
     res.json(result.rows);
 
   } catch (err) {
-
-    console.error("Error fetching orders:", err);
-
-    res.status(500).json({
-      error: "Failed to fetch orders"
-    });
-
+    console.error("❌ Fetch paid orders error:", err);
+    res.status(500).json({ error: "Failed to fetch paid orders" });
   }
 
 });
 
+// ==============================
+// UPDATE DELIVERY STATUS 🚚
+// ==============================
+
+app.post('/api/update-delivery', async (req, res) => {
+
+  const { order_id, status } = req.body;
+
+  if (!order_id || !status) {
+    return res.status(400).json({ error: "Missing order_id or status" });
+  }
+
+  try {
+
+    const result = await pool.query(
+      `UPDATE orders
+       SET delivery_status = $1
+       WHERE id = $2
+       RETURNING *`,
+      [status, order_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    res.json({
+      message: "Delivery status updated",
+      order: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error("❌ Delivery update error:", err);
+    res.status(500).json({ error: "Failed to update delivery status" });
+  }
+
+});
+
+// ==============================
+// HEALTH CHECK (VERY USEFUL)
+// ==============================
+
+app.get('/', (req, res) => {
+  res.send("🚀 API is running");
+});
 
 // ==============================
 // SERVER START
