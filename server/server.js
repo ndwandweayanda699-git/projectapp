@@ -3,8 +3,16 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const jwt = require("jsonwebtoken"); // 🔐 NEW
 
 const app = express();
+
+// ==============================
+// 🔐 ADMIN CONFIG
+// ==============================
+
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "sizakala123";
+const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 
 // ==============================
 // MIDDLEWARE
@@ -16,6 +24,47 @@ app.use(express.json());
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
   next();
+});
+
+// ==============================
+// 🔐 VERIFY ADMIN TOKEN
+// ==============================
+
+const verifyAdmin = (req, res, next) => {
+
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return res.status(401).json({ error: "No token provided" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (err) {
+    return res.status(403).json({ error: "Invalid token" });
+  }
+
+};
+
+// ==============================
+// 🔐 ADMIN LOGIN ROUTE
+// ==============================
+
+app.post("/api/admin/login", (req, res) => {
+
+  const { password } = req.body;
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: "Invalid password" });
+  }
+
+  const token = jwt.sign({ role: "admin" }, JWT_SECRET, { expiresIn: "2h" });
+
+  res.json({ token });
+
 });
 
 // ==============================
@@ -38,14 +87,13 @@ pool.connect((err, client, release) => {
 });
 
 // ==============================
-// CREATE ORDER (WITH DELIVERY)
+// CREATE ORDER (PUBLIC)
 // ==============================
 
 app.post('/api/orders', async (req, res) => {
 
   const { user_id, item_ordered, price, payment_method, address } = req.body;
 
-  // 🔒 Basic validation
   if (!user_id || !item_ordered || !price || !payment_method || !address) {
     return res.status(400).json({ error: "Missing required fields" });
   }
@@ -72,7 +120,7 @@ app.post('/api/orders', async (req, res) => {
 });
 
 // ==============================
-// YOCO WEBHOOK (PAYMENT SUCCESS)
+// YOCO WEBHOOK (PUBLIC)
 // ==============================
 
 app.post('/webhook/yoco', async (req, res) => {
@@ -92,7 +140,6 @@ app.post('/webhook/yoco', async (req, res) => {
         return res.sendStatus(200);
       }
 
-      // ✅ Prevent double updates
       const result = await pool.query(
         `UPDATE orders
          SET payment_status = 'paid'
@@ -105,7 +152,7 @@ app.post('/webhook/yoco', async (req, res) => {
       if (result.rows.length > 0) {
         console.log("✅ Order marked as PAID:", result.rows[0].id);
       } else {
-        console.log("⚠️ Order already updated or not found");
+        console.log("⚠️ Already updated or not found");
       }
     }
 
@@ -119,10 +166,10 @@ app.post('/webhook/yoco', async (req, res) => {
 });
 
 // ==============================
-// FETCH ALL ORDERS (MANAGER)
+// 🔐 FETCH ALL ORDERS (PROTECTED)
 // ==============================
 
-app.get('/api/orders', async (req, res) => {
+app.get('/api/orders', verifyAdmin, async (req, res) => {
 
   try {
 
@@ -140,33 +187,10 @@ app.get('/api/orders', async (req, res) => {
 });
 
 // ==============================
-// FETCH ONLY PAID ORDERS
+// 🔐 UPDATE DELIVERY (PROTECTED)
 // ==============================
 
-app.get('/api/orders/paid', async (req, res) => {
-
-  try {
-
-    const result = await pool.query(
-      `SELECT * FROM orders
-       WHERE payment_status = 'paid'
-       ORDER BY id DESC`
-    );
-
-    res.json(result.rows);
-
-  } catch (err) {
-    console.error("❌ Fetch paid orders error:", err);
-    res.status(500).json({ error: "Failed to fetch paid orders" });
-  }
-
-});
-
-// ==============================
-// UPDATE DELIVERY STATUS 🚚
-// ==============================
-
-app.post('/api/update-delivery', async (req, res) => {
+app.post('/api/update-delivery', verifyAdmin, async (req, res) => {
 
   const { order_id, status } = req.body;
 
@@ -201,7 +225,7 @@ app.post('/api/update-delivery', async (req, res) => {
 });
 
 // ==============================
-// HEALTH CHECK (VERY USEFUL)
+// HEALTH CHECK
 // ==============================
 
 app.get('/', (req, res) => {
