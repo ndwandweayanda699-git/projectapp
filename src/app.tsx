@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
 import { MENU_ITEMS } from './lib/datasource';
 import Input from './components/ui/input';
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Manager from "./pages/Manager";
 
 // ==============================
-// 🟢 MAIN APP UI
+// 🟢 MAIN APP UI ONLY (NO ROUTER)
 // ==============================
 
-const MainApp: React.FC = () => {
+const App: React.FC = () => {
 
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<any[]>([]);
@@ -70,18 +68,14 @@ const MainApp: React.FC = () => {
         return;
       }
 
-      // ✅ FIXED TEMPLATE STRING
       const successUrl = `https://projectapp-sk4p.onrender.com/success?order_id=${orderId}`;
 
-      // ✅ FIXED PAYMENT URL
       const paymentUrl =
         `https://pay.yoco.com/sizakala?amount=${totalAmount}` +
         `&reference=${orderRef}` +
         `&metadata[order_id]=${orderId}` +
         `&successUrl=${encodeURIComponent(successUrl)}` +
         `&cancelUrl=${encodeURIComponent(successUrl)}`;
-
-      console.log("Redirecting:", paymentUrl);
 
       window.location.href = paymentUrl;
 
@@ -148,12 +142,10 @@ const MainApp: React.FC = () => {
             </div>
           ))}
 
-          {/* TOTAL */}
           <p className="mt-4 font-bold">
             Total: R{cart.reduce((t, i) => t + i.price, 0)}
           </p>
 
-          {/* ADDRESS */}
           <input
             type="text"
             placeholder="Delivery address"
@@ -162,7 +154,6 @@ const MainApp: React.FC = () => {
             className="w-full mt-4 p-3 border rounded"
           />
 
-          {/* PAY */}
           <button
             onClick={handlePlaceOrder}
             className="mt-4 w-full bg-green-600 text-white p-4 rounded"
@@ -174,21 +165,6 @@ const MainApp: React.FC = () => {
 
       </main>
     </div>
-  );
-};
-
-// ==============================
-// 🔥 ROUTER (ONLY ONE ROUTER HERE)
-// ==============================
-
-const App: React.FC = () => {
-  return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<MainApp />} />
-        <Route path="/manager" element={<Manager />} />
-      </Routes>
-    </Router>
   );
 };
 
