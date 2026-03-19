@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { MENU_ITEMS } from './lib/datasource';
 import Input from './components/ui/input';
+import { useNavigate } from "react-router-dom";
 
 // ==============================
 // 🟢 MAIN APP UI ONLY (NO ROUTER)
 // ==============================
 
 const App: React.FC = () => {
+
+  const navigate = useNavigate(); // 🔥 navigation hook
 
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<any[]>([]);
@@ -88,10 +91,19 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
 
-      <header className="py-16 px-4 text-center bg-white border-b shadow-sm mb-10">
+      {/* 🔥 HEADER WITH MANAGER BUTTON */}
+      <header className="py-16 px-4 text-center bg-white border-b shadow-sm mb-10 relative">
         <h1 className="text-4xl font-black">
           Blue <span className="text-blue-600">Plate</span> Special
         </h1>
+
+        {/* ✅ Manager Button */}
+        <button
+          onClick={() => navigate("/manager")}
+          className="absolute top-6 right-6 bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800"
+        >
+          Manager
+        </button>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 pb-20">
