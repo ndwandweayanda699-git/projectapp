@@ -3,7 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
-const jwt = require("jsonwebtoken"); // 🔐 NEW
+const jwt = require("jsonwebtoken");
 
 const app = express();
 
@@ -50,18 +50,26 @@ const verifyAdmin = (req, res, next) => {
 };
 
 // ==============================
-// 🔐 ADMIN LOGIN ROUTE
+// 🔐 ADMIN LOGIN
 // ==============================
 
 app.post("/api/admin/login", (req, res) => {
 
   const { password } = req.body;
 
+  if (!password) {
+    return res.status(400).json({ error: "Password required" });
+  }
+
   if (password !== ADMIN_PASSWORD) {
     return res.status(401).json({ error: "Invalid password" });
   }
 
-  const token = jwt.sign({ role: "admin" }, JWT_SECRET, { expiresIn: "2h" });
+  const token = jwt.sign(
+    { role: "admin" },
+    JWT_SECRET,
+    { expiresIn: "2h" }
+  );
 
   res.json({ token });
 
@@ -76,7 +84,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Test connection
 pool.connect((err, client, release) => {
   if (err) {
     console.error('❌ DB Connection Error:', err.stack);
@@ -87,14 +94,21 @@ pool.connect((err, client, release) => {
 });
 
 // ==============================
-// CREATE ORDER (PUBLIC)
+// 🟢 CREATE ORDER (PUBLIC)
 // ==============================
 
 app.post('/api/orders', async (req, res) => {
 
-  const { user_id, item_ordered, price, payment_method, address } = req.body;
+  const {
+    user_id,
+    item_ordered,
+    price,
+    payment_method,
+    address,
+    phone // ✅ ADDED
+  } = req.body;
 
-  if (!user_id || !item_ordered || !price || !payment_method || !address) {
+  if (!user_id || !item_ordered || !price || !payment_method || !address || !phone) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
@@ -102,10 +116,10 @@ app.post('/api/orders', async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO orders
-      (user_id, item_ordered, price, payment_method, payment_status, address, delivery_status)
-      VALUES ($1,$2,$3,$4,'pending',$5,'pending')
+      (user_id, item_ordered, price, payment_method, payment_status, address, phone, delivery_status)
+      VALUES ($1,$2,$3,$4,'pending',$5,$6,'pending')
       RETURNING *`,
-      [user_id, item_ordered, price, payment_method, address]
+      [user_id, item_ordered, price, payment_method, address, phone]
     );
 
     res.status(201).json({
@@ -120,7 +134,7 @@ app.post('/api/orders', async (req, res) => {
 });
 
 // ==============================
-// YOCO WEBHOOK (PUBLIC)
+// 💳 YOCO WEBHOOK
 // ==============================
 
 app.post('/webhook/yoco', async (req, res) => {
@@ -129,14 +143,14 @@ app.post('/webhook/yoco', async (req, res) => {
 
     const event = req.body;
 
-    console.log("🔥 Webhook received:", event.type);
+    console.log("🔥 Webhook:", event.type);
 
     if (event.type === "payment.succeeded") {
 
       const orderId = event.metadata?.order_id;
 
       if (!orderId) {
-        console.log("⚠️ No order_id in metadata");
+        console.log("⚠️ Missing order_id");
         return res.sendStatus(200);
       }
 
@@ -150,7 +164,7 @@ app.post('/webhook/yoco', async (req, res) => {
       );
 
       if (result.rows.length > 0) {
-        console.log("✅ Order marked as PAID:", result.rows[0].id);
+        console.log("✅ Paid:", result.rows[0].id);
       } else {
         console.log("⚠️ Already updated or not found");
       }
@@ -166,7 +180,7 @@ app.post('/webhook/yoco', async (req, res) => {
 });
 
 // ==============================
-// 🔐 FETCH ALL ORDERS (PROTECTED)
+// 🔐 GET ALL ORDERS (PROTECTED)
 // ==============================
 
 app.get('/api/orders', verifyAdmin, async (req, res) => {
@@ -213,27 +227,27 @@ app.post('/api/update-delivery', verifyAdmin, async (req, res) => {
     }
 
     res.json({
-      message: "Delivery status updated",
+      message: "Delivery updated",
       order: result.rows[0]
     });
 
   } catch (err) {
-    console.error("❌ Delivery update error:", err);
-    res.status(500).json({ error: "Failed to update delivery status" });
+    console.error("❌ Delivery error:", err);
+    res.status(500).json({ error: "Failed to update delivery" });
   }
 
 });
 
 // ==============================
-// HEALTH CHECK
+// ❤️ HEALTH CHECK
 // ==============================
 
 app.get('/', (req, res) => {
-  res.send("🚀 API is running");
+  res.send("🚀 API running");
 });
 
 // ==============================
-// SERVER START
+// 🚀 SERVER START
 // ==============================
 
 const PORT = process.env.PORT || 5000;

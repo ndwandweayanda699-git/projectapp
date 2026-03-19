@@ -3,17 +3,14 @@ import { MENU_ITEMS } from './lib/datasource';
 import Input from './components/ui/input';
 import { useNavigate } from "react-router-dom";
 
-// ==============================
-// 🟢 MAIN APP UI ONLY (NO ROUTER)
-// ==============================
-
 const App: React.FC = () => {
 
-  const navigate = useNavigate(); // 🔥 navigation hook
+  const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<any[]>([]);
   const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState(""); // ✅ NEW
 
   const filteredItems = MENU_ITEMS.filter((item) =>
     item.name.toLowerCase().includes(search.toLowerCase())
@@ -39,6 +36,11 @@ const App: React.FC = () => {
       return;
     }
 
+    if (!phone.trim()) { // ✅ NEW
+      alert("Please enter phone number!");
+      return;
+    }
+
     const totalAmount = cart.reduce((sum, item) => sum + item.price, 0);
     const orderRef = "Order-" + Date.now();
     const itemOrdered = cart.map((item) => item.name).join(", ");
@@ -55,7 +57,8 @@ const App: React.FC = () => {
           item_ordered: itemOrdered,
           price: totalAmount,
           payment_method: "yoco",
-          address: address
+          address: address,
+          phone: phone // ✅ IMPORTANT
         })
       });
 
@@ -80,6 +83,8 @@ const App: React.FC = () => {
         `&successUrl=${encodeURIComponent(successUrl)}` +
         `&cancelUrl=${encodeURIComponent(successUrl)}`;
 
+      console.log("Redirecting:", paymentUrl);
+
       window.location.href = paymentUrl;
 
     } catch (error) {
@@ -91,13 +96,13 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
 
-      {/* 🔥 HEADER WITH MANAGER BUTTON */}
+      {/* HEADER */}
       <header className="py-16 px-4 text-center bg-white border-b shadow-sm mb-10 relative">
         <h1 className="text-4xl font-black">
           Blue <span className="text-blue-600">Plate</span> Special
         </h1>
 
-        {/* ✅ Manager Button */}
+        {/* MANAGER BUTTON */}
         <button
           onClick={() => navigate("/manager")}
           className="absolute top-6 right-6 bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800"
@@ -154,10 +159,12 @@ const App: React.FC = () => {
             </div>
           ))}
 
+          {/* TOTAL */}
           <p className="mt-4 font-bold">
             Total: R{cart.reduce((t, i) => t + i.price, 0)}
           </p>
 
+          {/* ADDRESS */}
           <input
             type="text"
             placeholder="Delivery address"
@@ -166,6 +173,16 @@ const App: React.FC = () => {
             className="w-full mt-4 p-3 border rounded"
           />
 
+          {/* ✅ PHONE INPUT */}
+          <input
+            type="text"
+            placeholder="Phone number"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full mt-4 p-3 border rounded"
+          />
+
+          {/* PAY BUTTON */}
           <button
             onClick={handlePlaceOrder}
             className="mt-4 w-full bg-green-600 text-white p-4 rounded"
