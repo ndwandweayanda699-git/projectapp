@@ -9,47 +9,94 @@ const Manager: React.FC = () => {
   const [loggedIn, setLoggedIn] = useState(false);
 
   // ==============================
-  // 🔐 LOGIN FUNCTION
+  // 🔐 LOGIN
   // ==============================
-
   const handleLogin = async () => {
 
-    const res = await fetch(`${BACKEND_URL}/api/admin/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ password })
-    });
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ password })
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (res.ok) {
-      localStorage.setItem("token", data.token);
-      setLoggedIn(true);
-    } else {
-      alert("Wrong password");
+      if (res.ok) {
+        localStorage.setItem("token", data.token);
+        setLoggedIn(true);
+        fetchOrders();
+      } else {
+        alert(data.error || "Wrong password");
+      }
+
+    } catch (err) {
+      console.error(err);
+      alert("Login failed");
     }
   };
 
   // ==============================
-  // 📦 FETCH ORDERS (WITH TOKEN)
+  // 📦 FETCH ORDERS
   // ==============================
-
   const fetchOrders = async () => {
 
     const token = localStorage.getItem("token");
 
-    const res = await fetch(`${BACKEND_URL}/api/orders`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
+    if (!token) return;
 
-    const data = await res.json();
-    setOrders(data);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/orders`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        console.log("Unauthorized or failed");
+        return;
+      }
+
+      const data = await res.json();
+      setOrders(data);
+
+    } catch (err) {
+      console.error("Fetch error:", err);
+    }
   };
 
+  // ==============================
+  // 🚚 UPDATE DELIVERY
+  // ==============================
+  const updateDelivery = async (orderId: number, status: string) => {
+
+    const token = localStorage.getItem("token");
+
+    try {
+      await fetch(`${BACKEND_URL}/api/update-delivery`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          order_id: orderId,
+          status
+        })
+      });
+
+      fetchOrders();
+
+    } catch (err) {
+      console.error("Update error:", err);
+    }
+  };
+
+  // ==============================
+  // 🔄 AUTO LOAD
+  // ==============================
   useEffect(() => {
 
     const token = localStorage.getItem("token");
@@ -65,32 +112,8 @@ const Manager: React.FC = () => {
   }, []);
 
   // ==============================
-  // 🚚 UPDATE DELIVERY (WITH TOKEN)
-  // ==============================
-
-  const updateDelivery = async (orderId: number, status: string) => {
-
-    const token = localStorage.getItem("token");
-
-    await fetch(`${BACKEND_URL}/api/update-delivery`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        order_id: orderId,
-        status
-      })
-    });
-
-    fetchOrders();
-  };
-
-  // ==============================
   // 🔐 LOGIN SCREEN
   // ==============================
-
   if (!loggedIn) {
     return (
       <div style={{ textAlign: "center", marginTop: 100 }}>
@@ -119,23 +142,41 @@ const Manager: React.FC = () => {
   // ==============================
   // 📊 DASHBOARD
   // ==============================
-
   return (
     <div style={{ padding: 20 }}>
       <h1>Manager Dashboard</h1>
 
-      {orders.map(order => (
-        <div key={order.id} style={{ border: "1px solid black", margin: 10, padding: 10 }}>
+      {orders.length === 0 && <p>No orders yet...</p>}
 
-          <p><b>Order:</b> {order.id}</p>
+      {orders.map(order => (
+        <div key={order.id} style={{
+          border: "1px solid black",
+          margin: 10,
+          padding: 15,
+          borderRadius: 8
+        }}>
+
+          <p><b>Order ID:</b> {order.id}</p>
           <p><b>Items:</b> {order.item_ordered}</p>
           <p><b>Price:</b> R{order.price}</p>
-          <p><b>Address:</b> {order.address}</p>
+
+          {/* ✅ NEW FIELDS */}
+          <p><b>Phone:</b> {order.phone || "N/A"}</p>
+          <p><b>Type:</b> {order.delivery_type || "delivery"}</p>
+
+          {/* Show address only if delivery */}
+          {order.delivery_type !== "pickup" && (
+            <p><b>Address:</b> {order.address}</p>
+          )}
 
           <p><b>Payment:</b> {order.payment_status}</p>
-          <p><b>Delivery:</b> {order.delivery_status}</p>
+          <p><b>Status:</b> {order.delivery_status}</p>
 
-          {order.payment_status === "paid" && order.delivery_status === "pending" && (
+          {/* 🚚 ACTION BUTTONS */}
+
+          {order.payment_status === "paid" &&
+           order.delivery_type === "delivery" &&
+           order.delivery_status === "pending" && (
             <button onClick={() => updateDelivery(order.id, "out_for_delivery")}>
               Start Delivery
             </button>
@@ -144,6 +185,15 @@ const Manager: React.FC = () => {
           {order.delivery_status === "out_for_delivery" && (
             <button onClick={() => updateDelivery(order.id, "delivered")}>
               Mark Delivered
+            </button>
+          )}
+
+          {/* 🛍️ PICKUP HANDLING */}
+          {order.delivery_type === "pickup" &&
+           order.payment_status === "paid" &&
+           order.delivery_status === "pending" && (
+            <button onClick={() => updateDelivery(order.id, "collected")}>
+              Mark Collected
             </button>
           )}
 

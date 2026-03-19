@@ -10,7 +10,9 @@ const App: React.FC = () => {
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<any[]>([]);
   const [address, setAddress] = useState("");
-  const [phone, setPhone] = useState(""); // ✅ NEW
+  const [phone, setPhone] = useState("");
+
+  const [deliveryType, setDeliveryType] = useState<"delivery" | "collection">("delivery"); // ✅ NEW
 
   const filteredItems = MENU_ITEMS.filter((item) =>
     item.name.toLowerCase().includes(search.toLowerCase())
@@ -31,12 +33,14 @@ const App: React.FC = () => {
       return;
     }
 
-    if (!address.trim()) {
+    // ✅ ONLY require address if delivery
+    if (deliveryType === "delivery" && !address.trim()) {
       alert("Please enter delivery address!");
       return;
     }
 
-    if (!phone.trim()) { // ✅ NEW
+    // ✅ phone required for both
+    if (!phone.trim()) {
       alert("Please enter phone number!");
       return;
     }
@@ -57,8 +61,9 @@ const App: React.FC = () => {
           item_ordered: itemOrdered,
           price: totalAmount,
           payment_method: "yoco",
-          address: address,
-          phone: phone // ✅ IMPORTANT
+          address: deliveryType === "delivery" ? address : "COLLECTION", // ✅ IMPORTANT
+          phone: phone,
+          delivery_type: deliveryType // ✅ optional (good for DB later)
         })
       });
 
@@ -83,8 +88,6 @@ const App: React.FC = () => {
         `&successUrl=${encodeURIComponent(successUrl)}` +
         `&cancelUrl=${encodeURIComponent(successUrl)}`;
 
-      console.log("Redirecting:", paymentUrl);
-
       window.location.href = paymentUrl;
 
     } catch (error) {
@@ -102,7 +105,6 @@ const App: React.FC = () => {
           Blue <span className="text-blue-600">Plate</span> Special
         </h1>
 
-        {/* MANAGER BUTTON */}
         <button
           onClick={() => navigate("/manager")}
           className="absolute top-6 right-6 bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800"
@@ -126,13 +128,11 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredItems.map((item) => (
             <div key={item.id} className="bg-white p-4 rounded-xl shadow">
-
               <img
                 src={item.image}
                 alt={item.name}
                 className="w-full h-48 object-cover rounded-lg"
               />
-
               <h3 className="text-xl font-bold mt-3">{item.name}</h3>
               <p>R{item.price}</p>
 
@@ -142,7 +142,6 @@ const App: React.FC = () => {
               >
                 Add to Cart
               </button>
-
             </div>
           ))}
         </div>
@@ -159,21 +158,43 @@ const App: React.FC = () => {
             </div>
           ))}
 
-          {/* TOTAL */}
           <p className="mt-4 font-bold">
             Total: R{cart.reduce((t, i) => t + i.price, 0)}
           </p>
 
-          {/* ADDRESS */}
-          <input
-            type="text"
-            placeholder="Delivery address"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            className="w-full mt-4 p-3 border rounded"
-          />
+          {/* ✅ DELIVERY TYPE SWITCH */}
+          <div className="mt-4">
+            <label>
+              <input
+                type="radio"
+                value="delivery"
+                checked={deliveryType === "delivery"}
+                onChange={() => setDeliveryType("delivery")}
+              /> Delivery
+            </label>
 
-          {/* ✅ PHONE INPUT */}
+            <label className="ml-4">
+              <input
+                type="radio"
+                value="collection"
+                checked={deliveryType === "collection"}
+                onChange={() => setDeliveryType("collection")}
+              /> Collection
+            </label>
+          </div>
+
+          {/* ADDRESS ONLY IF DELIVERY */}
+          {deliveryType === "delivery" && (
+            <input
+              type="text"
+              placeholder="Delivery address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className="w-full mt-4 p-3 border rounded"
+            />
+          )}
+
+          {/* PHONE */}
           <input
             type="text"
             placeholder="Phone number"
@@ -182,7 +203,6 @@ const App: React.FC = () => {
             className="w-full mt-4 p-3 border rounded"
           />
 
-          {/* PAY BUTTON */}
           <button
             onClick={handlePlaceOrder}
             className="mt-4 w-full bg-green-600 text-white p-4 rounded"

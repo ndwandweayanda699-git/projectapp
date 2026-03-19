@@ -105,21 +105,40 @@ app.post('/api/orders', async (req, res) => {
     price,
     payment_method,
     address,
-    phone // ✅ ADDED
+    phone,
+    delivery_type // ✅ NEW
   } = req.body;
 
-  if (!user_id || !item_ordered || !price || !payment_method || !address || !phone) {
+  // ✅ BASIC VALIDATION
+  if (!user_id || !item_ordered || !price || !payment_method || !phone) {
     return res.status(400).json({ error: "Missing required fields" });
   }
+
+  // ✅ DELIVERY RULE
+  if (delivery_type === "delivery" && !address) {
+    return res.status(400).json({ error: "Address required for delivery" });
+  }
+
+  // ✅ DEFAULTS
+  const finalAddress = delivery_type === "collection" ? "COLLECTION" : address || "COLLECTION";
+  const finalDeliveryType = delivery_type || "collection";
 
   try {
 
     const result = await pool.query(
       `INSERT INTO orders
-      (user_id, item_ordered, price, payment_method, payment_status, address, phone, delivery_status)
-      VALUES ($1,$2,$3,$4,'pending',$5,$6,'pending')
+      (user_id, item_ordered, price, payment_method, payment_status, address, phone, delivery_status, delivery_type)
+      VALUES ($1,$2,$3,$4,'pending',$5,$6,'pending',$7)
       RETURNING *`,
-      [user_id, item_ordered, price, payment_method, address, phone]
+      [
+        user_id,
+        item_ordered,
+        price,
+        payment_method,
+        finalAddress,
+        phone,
+        finalDeliveryType
+      ]
     );
 
     res.status(201).json({
