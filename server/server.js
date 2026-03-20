@@ -18,7 +18,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 // 🚨 MIDDLEWARE
 // ==============================
 
-// 🔥 RAW body for Yoco ONLY
+// 🔥 RAW body for Yoco ONLY (must come before express.json)
 app.use('/webhook/yoco', express.raw({ type: '*/*' }));
 
 app.use(express.json());
@@ -30,7 +30,7 @@ app.use((req, res, next) => {
 });
 
 // ==============================
-// 🔐 AUTH
+// 🔐 AUTH MIDDLEWARE
 // ==============================
 
 const verifyAdmin = (req, res, next) => {
@@ -57,7 +57,7 @@ app.post("/api/admin/login", (req, res) => {
     return res.status(401).json({ error: "Wrong password" });
   }
 
-  const token = jwt.sign({ role: "admin" }, JWT_SECRET, { expiresIn: "2h" });
+  const token = jwt.sign({ role: "admin" }, JWT_SECRET, { expiresIn: "4h" });
   res.json({ token });
 });
 
@@ -71,11 +71,10 @@ const pool = new Pool({
 });
 
 // ==============================
-// 🟢 CREATE ORDER
+// 🟢 CREATE ORDER (Customer Side)
 // ==============================
 
 app.post('/api/orders', async (req, res) => {
-
   const {
     user_id,
     item_ordered,
@@ -90,13 +89,7 @@ app.post('/api/orders', async (req, res) => {
     return res.status(400).json({ error: "Missing fields" });
   }
 
-  if (delivery_type === "delivery" && !address) {
-    return res.status(400).json({ error: "Address required" });
-  }
-
-  const finalAddress =
-    delivery_type === "collection" ? "COLLECTION" : address || "COLLECTION";
-
+  const finalAddress = delivery_type === "collection" ? "COLLECTION" : address || "COLLECTION";
   const finalDeliveryType = delivery_type || "collection";
 
   try {
@@ -105,19 +98,10 @@ app.post('/api/orders', async (req, res) => {
       (user_id, item_ordered, price, payment_method, payment_status, address, phone, delivery_status, delivery_type, created_at)
       VALUES ($1,$2,$3,$4,'pending',$5,$6,'pending',$7,NOW())
       RETURNING *`,
-      [
-        user_id,
-        item_ordered,
-        price,
-        payment_method,
-        finalAddress,
-        phone,
-        finalDeliveryType
-      ]
+      [user_id, item_ordered, price, payment_method, finalAddress, phone, finalDeliveryType]
     );
 
     res.json({ order: result.rows[0] });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Create failed" });
@@ -129,31 +113,21 @@ app.post('/api/orders', async (req, res) => {
 // ==============================
 
 app.post('/webhook/yoco', async (req, res) => {
-
   try {
-
     const event = JSON.parse(req.body.toString());
-
     console.log("🔥 Webhook:", event.type);
 
     if (event.type === "payment.succeeded") {
-
       const orderId = event.metadata?.order_id;
-
       if (!orderId) return res.sendStatus(200);
 
       await pool.query(
-        `UPDATE orders
-         SET payment_status='paid'
-         WHERE id=$1 AND payment_status='pending'`,
+        `UPDATE orders SET payment_status='paid' WHERE id=$1 AND payment_status='pending'`,
         [orderId]
       );
-
       console.log("✅ Payment updated:", orderId);
     }
-
     res.sendStatus(200);
-
   } catch (err) {
     console.error("❌ Webhook error:", err);
     res.sendStatus(500);
@@ -161,95 +135,111 @@ app.post('/webhook/yoco', async (req, res) => {
 });
 
 // ==============================
-// 🔐 GET ACTIVE ORDERS
+// 🔐 GET ACTIVE ORDERS (Manager)
 // ==============================
 
 app.get('/api/orders', verifyAdmin, async (req, res) => {
-
-  const result = await pool.query(
-    `SELECT * FROM orders ORDER BY id DESC`
-  );
-
-  res.json(result.rows);
+  try {
+    const result = await pool.query(`SELECT * FROM orders ORDER BY id DESC`);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Fetch failed" });
+  }
 });
 
 // ==============================
-// 🔐 UPDATE DELIVERY
+// 🔐 UPDATE DELIVERY (Manager)
 // ==============================
 
 app.post('/api/update-delivery', verifyAdmin, async (req, res) => {
-
   const { order_id, status } = req.body;
-
-  const result = await pool.query(
-    `UPDATE orders
-     SET delivery_status=$1
-     WHERE id=$2
-     RETURNING *`,
-    [status, order_id]
-  );
-
-  res.json(result.rows[0]);
+  try {
+    const result = await pool.query(
+      `UPDATE orders SET delivery_status=$1 WHERE id=$2 RETURNING *`,
+      [status, order_id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: "Update failed" });
+  }
 });
 
 // ==============================
-// 🔐 DELETE ORDER
+// 🔐 MANUAL ARCHIVE (Manager - FIXED)
+// ==============================
+
+app.post('/api/archive-order', verifyAdmin, async (req, res) => {
+  const { order_id } = req.body;
+  try {
+    // 1. Move to archive
+    await pool.query(`
+      INSERT INTO orders_archive
+      SELECT * FROM orders WHERE id = $1
+      ON CONFLICT (id) DO NOTHING
+    `, [order_id]);
+
+    // 2. Remove from active orders
+    await pool.query(`DELETE FROM orders WHERE id = $1`, [order_id]);
+
+    res.json({ message: "Archived" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Archive failed" });
+  }
+});
+
+// ==============================
+// 🔐 DELETE ORDER (Manager)
 // ==============================
 
 app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
-
   const { id } = req.params;
-
-  await pool.query(`DELETE FROM orders WHERE id=$1`, [id]);
-
-  res.json({ message: "Deleted" });
+  try {
+    await pool.query(`DELETE FROM orders WHERE id=$1`, [id]);
+    res.json({ message: "Deleted" });
+  } catch (err) {
+    res.status(500).json({ error: "Delete failed" });
+  }
 });
 
 // ==============================
-// 📦 ARCHIVE SYSTEM (SAFE)
+// 📦 AUTO-ARCHIVE JOB (FIXED LOGIC)
 // ==============================
 
 const archiveOldOrders = async () => {
   try {
-    console.log("🕒 Running archive job...");
+    console.log("🕒 Running auto-archive...");
 
-    // ONLY move orders not already archived
+    // FIX: Only archive orders that are DELIVERED and older than 24h
+    // This stops active or unpaid orders from disappearing.
     await pool.query(`
       INSERT INTO orders_archive
       SELECT * FROM orders
-      WHERE created_at < NOW() - INTERVAL '24 hours'
-      AND id NOT IN (SELECT id FROM orders_archive)
+      WHERE delivery_status = 'delivered'
+      AND created_at < NOW() - INTERVAL '24 hours'
+      ON CONFLICT (id) DO NOTHING
     `);
 
     await pool.query(`
       DELETE FROM orders
-      WHERE created_at < NOW() - INTERVAL '24 hours'
+      WHERE delivery_status = 'delivered'
+      AND created_at < NOW() - INTERVAL '24 hours'
     `);
 
-    console.log("✅ Archive complete");
-
+    console.log("✅ Auto-archive complete");
   } catch (err) {
-    console.error("❌ Archive error:", err);
+    console.error("❌ Auto-archive error:", err);
   }
 };
 
-// run every hour
+// Run every hour
 setInterval(archiveOldOrders, 60 * 60 * 1000);
 
 // ==============================
-// ❤️ HEALTH
+// ❤️ HEALTH & START
 // ==============================
 
-app.get('/', (req, res) => {
-  res.send("🚀 API running");
-});
-
-// ==============================
-// 🚀 START
-// ==============================
+app.get('/', (req, res) => res.send("🚀 API running"));
 
 const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`🚀 Running on ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Running on ${PORT}`));
