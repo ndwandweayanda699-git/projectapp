@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 
-// ✅ Correct backend URL
+// ✅ Backend URL
 const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
 
 const Manager: React.FC = () => {
@@ -9,7 +9,6 @@ const Manager: React.FC = () => {
   const [loggedIn, setLoggedIn] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Helper for Headers
   const getHeaders = () => ({
     "Content-Type": "application/json",
     "Authorization": `Bearer ${localStorage.getItem("token")}`
@@ -34,10 +33,7 @@ const Manager: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      console.log("FETCH ORDERS STATUS:", res.status);
-
       const data = await res.json();
-      console.log("ORDERS DATA:", data);
 
       if (Array.isArray(data)) {
         setOrders(data);
@@ -47,16 +43,14 @@ const Manager: React.FC = () => {
         setOrders([]);
       }
     } catch (err) {
-      console.error("Network error fetching orders", err);
+      console.error("Error fetching orders", err);
     } finally {
       setIsRefreshing(false);
     }
   }, []);
 
-  // 🔑 LOGIN (UPDATED WITH DEBUG)
+  // 🔑 LOGIN
   const handleLogin = async () => {
-    console.log("LOGIN CLICKED");
-
     try {
       const res = await fetch(`${BACKEND_URL}/api/admin/login`, {
         method: "POST",
@@ -66,10 +60,7 @@ const Manager: React.FC = () => {
         body: JSON.stringify({ password })
       });
 
-      console.log("LOGIN STATUS:", res.status);
-
       const data = await res.json();
-      console.log("LOGIN DATA:", data);
 
       if (res.ok) {
         localStorage.setItem("token", data.token);
@@ -79,12 +70,11 @@ const Manager: React.FC = () => {
         alert(data.error || "Wrong password");
       }
     } catch (err) {
-      console.error("LOGIN ERROR:", err);
       alert("Could not connect to server.");
     }
   };
 
-  // 🔄 POLLING EFFECT
+  // 🔄 AUTO REFRESH
   useEffect(() => {
     const token = localStorage.getItem("token");
 
@@ -102,7 +92,7 @@ const Manager: React.FC = () => {
     return () => clearInterval(interval);
   }, [loggedIn, fetchOrders]);
 
-  // 🚚 ACTIONS
+  // 🚚 UPDATE DELIVERY
   const updateDelivery = async (orderId: number, status: string) => {
     await fetch(`${BACKEND_URL}/api/update-delivery`, {
       method: "POST",
@@ -110,25 +100,6 @@ const Manager: React.FC = () => {
       body: JSON.stringify({ order_id: orderId, status })
     });
     fetchOrders();
-  };
-
-  // 🗃️ ARCHIVE
-  const archiveOrder = async (orderId: number) => {
-    setOrders(prev => prev.filter(order => order.id !== orderId));
-
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/archive-order`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify({ order_id: orderId })
-      });
-
-      if (!res.ok) throw new Error("Archive failed");
-    } catch (err) {
-      console.error(err);
-      alert("Archive failed. Refreshing...");
-      fetchOrders();
-    }
   };
 
   // ❌ DELETE
@@ -140,14 +111,11 @@ const Manager: React.FC = () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
         method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${localStorage.getItem("token")}`
-        }
+        headers: getHeaders()
       });
 
-      if (!res.ok) throw new Error("Delete failed");
-    } catch (err) {
-      console.error(err);
+      if (!res.ok) throw new Error();
+    } catch {
       alert("Delete failed. Refreshing...");
       fetchOrders();
     }
@@ -170,45 +138,143 @@ const Manager: React.FC = () => {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-          style={{ padding: 12, width: 250 }}
+          style={{
+            padding: 12,
+            width: 250,
+            borderRadius: 6,
+            border: "1px solid #ccc"
+          }}
         />
 
         <br />
 
-        <button onClick={handleLogin} style={{ marginTop: 20 }}>
+        <button
+          onClick={handleLogin}
+          style={{
+            marginTop: 20,
+            padding: "10px 25px",
+            background: "#007bff",
+            color: "white",
+            border: "none",
+            borderRadius: 6
+          }}
+        >
           Login
         </button>
       </div>
     );
   }
 
-  // 📊 DASHBOARD
+  // 📊 DASHBOARD (PROFESSIONAL UI)
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Manager Dashboard</h1>
+    <div style={{
+      padding: "30px",
+      maxWidth: "900px",
+      margin: "0 auto",
+      fontFamily: "Arial",
+      background: "#f4f6f9",
+      minHeight: "100vh"
+    }}>
 
-      <button onClick={handleLogout}>Logout</button>
+      {/* HEADER */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: "30px"
+      }}>
+        <h1>📊 Manager Dashboard</h1>
 
-      <h2>Total Paid Revenue: R{totalPaidRevenue.toFixed(2)}</h2>
+        <button
+          onClick={handleLogout}
+          style={{
+            padding: "8px 15px",
+            background: "#6c757d",
+            color: "white",
+            border: "none",
+            borderRadius: 6
+          }}
+        >
+          Logout
+        </button>
+      </div>
 
+      {/* REVENUE CARD */}
+      <div style={{
+        background: "#28a745",
+        color: "white",
+        padding: "20px",
+        borderRadius: 12,
+        marginBottom: 30
+      }}>
+        <p>Total Paid Revenue</p>
+        <h2>R{totalPaidRevenue.toFixed(2)}</h2>
+      </div>
+
+      {/* ORDERS */}
       {orders.length > 0 ? (
         orders.map(order => (
-          <div key={order.id}>
-            <p>#{order.id}</p>
-            <p>{order.item_ordered}</p>
-            <p>R{order.price}</p>
+          <div key={order.id} style={{
+            background: "white",
+            padding: 20,
+            borderRadius: 12,
+            marginBottom: 15,
+            boxShadow: "0 2px 6px rgba(0,0,0,0.05)"
+          }}>
 
-            <button onClick={() => updateDelivery(order.id, "delivered")}>
-              Deliver
-            </button>
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between"
+            }}>
+              <strong>Order #{order.id}</strong>
 
-            <button onClick={() => deleteOrder(order.id)}>
-              Delete
-            </button>
+              <span style={{
+                padding: "5px 10px",
+                borderRadius: 20,
+                background: order.payment_status === "paid" ? "#d4edda" : "#f8d7da",
+                color: order.payment_status === "paid" ? "#155724" : "#721c24"
+              }}>
+                {order.payment_status}
+              </span>
+            </div>
+
+            <p><b>Items:</b> {order.item_ordered}</p>
+            <p><b>Price:</b> R{order.price}</p>
+            <p><b>Status:</b> {order.delivery_status}</p>
+
+            <div style={{ marginTop: 10 }}>
+              <button
+                onClick={() => updateDelivery(order.id, "delivered")}
+                style={{
+                  marginRight: 10,
+                  padding: "8px 12px",
+                  background: "#007bff",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 6
+                }}
+              >
+                Deliver
+              </button>
+
+              <button
+                onClick={() => deleteOrder(order.id)}
+                style={{
+                  padding: "8px 12px",
+                  background: "#dc3545",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 6
+                }}
+              >
+                Delete
+              </button>
+            </div>
+
           </div>
         ))
       ) : (
-        <p>No orders</p>
+        <p style={{ textAlign: "center" }}>No orders</p>
       )}
     </div>
   );
