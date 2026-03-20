@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 
 // ⚠️ Updated to match the active URL from your screenshot
-const BACKEND_URL = "https://projectapp-sk4p.onrender.com";
+const BACKEND_URL = "";
 
 const Manager: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
