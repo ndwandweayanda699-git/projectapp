@@ -8,97 +8,41 @@ const Manager: React.FC = () => {
   const [password, setPassword] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
 
-  // ==============================
-  // 🔐 LOGIN
-  // ==============================
+  // LOGIN
   const handleLogin = async () => {
+    const res = await fetch(`${BACKEND_URL}/api/admin/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ password })
+    });
 
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ password })
-      });
+    const data = await res.json();
 
-      const data = await res.json();
-
-      if (res.ok) {
-        localStorage.setItem("token", data.token);
-        setLoggedIn(true);
-        fetchOrders();
-      } else {
-        alert(data.error || "Wrong password");
-      }
-
-    } catch (err) {
-      console.error(err);
-      alert("Login failed");
+    if (res.ok) {
+      localStorage.setItem("token", data.token);
+      setLoggedIn(true);
+    } else {
+      alert("Wrong password");
     }
   };
 
-  // ==============================
-  // 📦 FETCH ORDERS
-  // ==============================
+  // FETCH ORDERS
   const fetchOrders = async () => {
-
     const token = localStorage.getItem("token");
 
-    if (!token) return;
-
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/orders`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (!res.ok) {
-        console.log("Unauthorized or failed");
-        return;
+    const res = await fetch(`${BACKEND_URL}/api/orders`, {
+      headers: {
+        Authorization: `Bearer ${token}`
       }
+    });
 
-      const data = await res.json();
-      setOrders(data);
-
-    } catch (err) {
-      console.error("Fetch error:", err);
-    }
+    const data = await res.json();
+    setOrders(data);
   };
 
-  // ==============================
-  // 🚚 UPDATE DELIVERY
-  // ==============================
-  const updateDelivery = async (orderId: number, status: string) => {
-
-    const token = localStorage.getItem("token");
-
-    try {
-      await fetch(`${BACKEND_URL}/api/update-delivery`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          order_id: orderId,
-          status
-        })
-      });
-
-      fetchOrders();
-
-    } catch (err) {
-      console.error("Update error:", err);
-    }
-  };
-
-  // ==============================
-  // 🔄 AUTO LOAD
-  // ==============================
   useEffect(() => {
-
     const token = localStorage.getItem("token");
 
     if (token) {
@@ -108,12 +52,60 @@ const Manager: React.FC = () => {
 
     const interval = setInterval(fetchOrders, 5000);
     return () => clearInterval(interval);
-
   }, []);
 
-  // ==============================
-  // 🔐 LOGIN SCREEN
-  // ==============================
+  // 🚚 DELIVERY UPDATE
+  const updateDelivery = async (orderId: number, status: string) => {
+    const token = localStorage.getItem("token");
+
+    await fetch(`${BACKEND_URL}/api/update-delivery`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        order_id: orderId,
+        status
+      })
+    });
+
+    fetchOrders();
+  };
+
+  // 🗃️ ARCHIVE
+  const archiveOrder = async (orderId: number) => {
+    const token = localStorage.getItem("token");
+
+    await fetch(`${BACKEND_URL}/api/archive-order`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ order_id: orderId })
+    });
+
+    fetchOrders();
+  };
+
+  // ❌ DELETE
+  const deleteOrder = async (orderId: number) => {
+    const token = localStorage.getItem("token");
+
+    if (!window.confirm("Delete permanently?")) return;
+
+    await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    fetchOrders();
+  };
+
+  // LOGIN SCREEN
   if (!loggedIn) {
     return (
       <div style={{ textAlign: "center", marginTop: 100 }}>
@@ -139,44 +131,26 @@ const Manager: React.FC = () => {
     );
   }
 
-  // ==============================
-  // 📊 DASHBOARD
-  // ==============================
+  // DASHBOARD
   return (
     <div style={{ padding: 20 }}>
       <h1>Manager Dashboard</h1>
 
-      {orders.length === 0 && <p>No orders yet...</p>}
-
       {orders.map(order => (
-        <div key={order.id} style={{
-          border: "1px solid black",
-          margin: 10,
-          padding: 15,
-          borderRadius: 8
-        }}>
+        <div key={order.id} style={{ border: "1px solid black", margin: 10, padding: 10 }}>
 
-          <p><b>Order ID:</b> {order.id}</p>
+          <p><b>Order:</b> {order.id}</p>
           <p><b>Items:</b> {order.item_ordered}</p>
           <p><b>Price:</b> R{order.price}</p>
-
-          {/* ✅ NEW FIELDS */}
-          <p><b>Phone:</b> {order.phone || "N/A"}</p>
-          <p><b>Type:</b> {order.delivery_type || "delivery"}</p>
-
-          {/* Show address only if delivery */}
-          {order.delivery_type !== "pickup" && (
-            <p><b>Address:</b> {order.address}</p>
-          )}
+          <p><b>Phone:</b> {order.phone}</p>
+          <p><b>Type:</b> {order.delivery_type}</p>
+          <p><b>Address:</b> {order.address}</p>
 
           <p><b>Payment:</b> {order.payment_status}</p>
           <p><b>Status:</b> {order.delivery_status}</p>
 
-          {/* 🚚 ACTION BUTTONS */}
-
-          {order.payment_status === "paid" &&
-           order.delivery_type === "delivery" &&
-           order.delivery_status === "pending" && (
+          {/* DELIVERY BUTTONS */}
+          {order.payment_status === "paid" && order.delivery_status === "pending" && (
             <button onClick={() => updateDelivery(order.id, "out_for_delivery")}>
               Start Delivery
             </button>
@@ -188,14 +162,23 @@ const Manager: React.FC = () => {
             </button>
           )}
 
-          {/* 🛍️ PICKUP HANDLING */}
-          {order.delivery_type === "pickup" &&
-           order.payment_status === "paid" &&
-           order.delivery_status === "pending" && (
-            <button onClick={() => updateDelivery(order.id, "collected")}>
-              Mark Collected
-            </button>
-          )}
+          <br /><br />
+
+          {/* 🗃️ ARCHIVE */}
+          <button
+            onClick={() => archiveOrder(order.id)}
+            style={{ marginRight: 10 }}
+          >
+            Archive
+          </button>
+
+          {/* ❌ DELETE */}
+          <button
+            onClick={() => deleteOrder(order.id)}
+            style={{ background: "red", color: "white" }}
+          >
+            Delete
+          </button>
 
         </div>
       ))}

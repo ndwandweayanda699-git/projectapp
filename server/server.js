@@ -8,20 +8,19 @@ const jwt = require("jsonwebtoken");
 const app = express();
 
 // ==============================
-// 🔐 ADMIN CONFIG
+// 🔐 CONFIG
 // ==============================
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "sizakala123";
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 
 // ==============================
-// 🚨 MIDDLEWARE (YOCO FIX)
+// 🚨 MIDDLEWARE
 // ==============================
 
-// 🔥 RAW body ONLY for webhook
+// 🔥 RAW body for Yoco ONLY
 app.use('/webhook/yoco', express.raw({ type: '*/*' }));
 
-// Normal middleware
 app.use(express.json());
 app.use(cors());
 
@@ -31,28 +30,24 @@ app.use((req, res, next) => {
 });
 
 // ==============================
-// 🔐 VERIFY ADMIN TOKEN
+// 🔐 AUTH
 // ==============================
 
 const verifyAdmin = (req, res, next) => {
-  const authHeader = req.headers.authorization;
+  const token = req.headers.authorization?.split(" ")[1];
 
-  if (!authHeader) {
-    return res.status(401).json({ error: "No token" });
-  }
-
-  const token = authHeader.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "No token" });
 
   try {
     jwt.verify(token, JWT_SECRET);
     next();
   } catch {
-    return res.status(403).json({ error: "Invalid token" });
+    res.status(403).json({ error: "Invalid token" });
   }
 };
 
 // ==============================
-// 🔐 ADMIN LOGIN
+// 🔐 LOGIN
 // ==============================
 
 app.post("/api/admin/login", (req, res) => {
@@ -63,12 +58,11 @@ app.post("/api/admin/login", (req, res) => {
   }
 
   const token = jwt.sign({ role: "admin" }, JWT_SECRET, { expiresIn: "2h" });
-
   res.json({ token });
 });
 
 // ==============================
-// DATABASE (NEON)
+// 🗄️ DATABASE
 // ==============================
 
 const pool = new Pool({
@@ -146,26 +140,28 @@ app.post('/webhook/yoco', async (req, res) => {
 
       const orderId = event.metadata?.order_id;
 
+      if (!orderId) return res.sendStatus(200);
+
       await pool.query(
         `UPDATE orders
          SET payment_status='paid'
-         WHERE id=$1`,
+         WHERE id=$1 AND payment_status='pending'`,
         [orderId]
       );
 
-      console.log("✅ Paid:", orderId);
+      console.log("✅ Payment updated:", orderId);
     }
 
     res.sendStatus(200);
 
   } catch (err) {
-    console.error(err);
+    console.error("❌ Webhook error:", err);
     res.sendStatus(500);
   }
 });
 
 // ==============================
-// 🔐 GET ORDERS
+// 🔐 GET ACTIVE ORDERS
 // ==============================
 
 app.get('/api/orders', verifyAdmin, async (req, res) => {
@@ -197,7 +193,7 @@ app.post('/api/update-delivery', verifyAdmin, async (req, res) => {
 });
 
 // ==============================
-// 🔐 DELETE ORDER (MANUAL)
+// 🔐 DELETE ORDER
 // ==============================
 
 app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
@@ -210,21 +206,21 @@ app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
 });
 
 // ==============================
-// 📦 ARCHIVE OLD ORDERS
+// 📦 ARCHIVE SYSTEM (SAFE)
 // ==============================
 
 const archiveOldOrders = async () => {
   try {
     console.log("🕒 Running archive job...");
 
-    // move old orders to archive table
+    // ONLY move orders not already archived
     await pool.query(`
       INSERT INTO orders_archive
       SELECT * FROM orders
       WHERE created_at < NOW() - INTERVAL '24 hours'
+      AND id NOT IN (SELECT id FROM orders_archive)
     `);
 
-    // delete from main table
     await pool.query(`
       DELETE FROM orders
       WHERE created_at < NOW() - INTERVAL '24 hours'
@@ -241,7 +237,7 @@ const archiveOldOrders = async () => {
 setInterval(archiveOldOrders, 60 * 60 * 1000);
 
 // ==============================
-// HEALTH
+// ❤️ HEALTH
 // ==============================
 
 app.get('/', (req, res) => {
@@ -249,7 +245,7 @@ app.get('/', (req, res) => {
 });
 
 // ==============================
-// START SERVER
+// 🚀 START
 // ==============================
 
 const PORT = process.env.PORT || 5000;
