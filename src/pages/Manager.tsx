@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 
-// ⚠️ Make sure this URL matches your Render Dashboard exactly!
-const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
+// ⚠️ Updated to match the active URL from your screenshot
+const BACKEND_URL = "https://projectapp-sk4p.onrender.com";
 
 const Manager: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
@@ -98,22 +98,43 @@ const Manager: React.FC = () => {
     fetchOrders();
   };
 
+  // 🗃️ ARCHIVE (Optimistic Update)
   const archiveOrder = async (orderId: number) => {
-    await fetch(`${BACKEND_URL}/api/archive-order`, {
-      method: "POST",
-      headers: getHeaders(),
-      body: JSON.stringify({ order_id: orderId })
-    });
-    fetchOrders();
+    // Remove from UI immediately
+    setOrders(prev => prev.filter(order => order.id !== orderId));
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/archive-order`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ order_id: orderId })
+      });
+      if (!res.ok) throw new Error("Archive failed");
+    } catch (err) {
+      console.error(err);
+      alert("Archive failed on server. Refreshing...");
+      fetchOrders();
+    }
   };
 
+  // ❌ DELETE (Optimistic Update)
   const deleteOrder = async (orderId: number) => {
     if (!window.confirm("Delete permanently?")) return;
-    await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
-      method: "DELETE",
-      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
-    });
-    fetchOrders();
+
+    // Remove from UI immediately
+    setOrders(prev => prev.filter(order => order.id !== orderId));
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+      });
+      if (!res.ok) throw new Error("Delete failed");
+    } catch (err) {
+      console.error(err);
+      alert("Delete failed on server. Refreshing...");
+      fetchOrders();
+    }
   };
 
   // 💰 CALCULATE REVENUE (Paid only)
