@@ -22,7 +22,13 @@ const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 app.use('/webhook/yoco', express.raw({ type: '*/*' }));
 
 app.use(express.json());
-app.use(cors());
+
+// 🛡️ UPDATED CORS: This allows your frontend to connect properly
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
@@ -39,7 +45,8 @@ const verifyAdmin = (req, res, next) => {
   if (!token) return res.status(401).json({ error: "No token" });
 
   try {
-    jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.admin = decoded;
     next();
   } catch {
     res.status(403).json({ error: "Invalid token" });
@@ -165,13 +172,13 @@ app.post('/api/update-delivery', verifyAdmin, async (req, res) => {
 });
 
 // ==============================
-// 🔐 MANUAL ARCHIVE (Manager - FIXED)
+// 🔐 MANUAL ARCHIVE (Manager)
 // ==============================
 
 app.post('/api/archive-order', verifyAdmin, async (req, res) => {
   const { order_id } = req.body;
   try {
-    // 1. Move to archive
+    // 1. Move to archive table
     await pool.query(`
       INSERT INTO orders_archive
       SELECT * FROM orders WHERE id = $1
@@ -203,15 +210,12 @@ app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
 });
 
 // ==============================
-// 📦 AUTO-ARCHIVE JOB (FIXED LOGIC)
+// 📦 AUTO-ARCHIVE JOB (Delivered only)
 // ==============================
 
 const archiveOldOrders = async () => {
   try {
-    console.log("🕒 Running auto-archive...");
-
-    // FIX: Only archive orders that are DELIVERED and older than 24h
-    // This stops active or unpaid orders from disappearing.
+    console.log("🕒 Running auto-archive job...");
     await pool.query(`
       INSERT INTO orders_archive
       SELECT * FROM orders
@@ -225,15 +229,13 @@ const archiveOldOrders = async () => {
       WHERE delivery_status = 'delivered'
       AND created_at < NOW() - INTERVAL '24 hours'
     `);
-
     console.log("✅ Auto-archive complete");
   } catch (err) {
     console.error("❌ Auto-archive error:", err);
   }
 };
 
-// Run every hour
-setInterval(archiveOldOrders, 60 * 60 * 1000);
+setInterval(archiveOldOrders, 60 * 60 * 1000); // Every hour
 
 // ==============================
 // ❤️ HEALTH & START
