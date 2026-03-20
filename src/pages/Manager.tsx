@@ -1,187 +1,183 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 
+// ⚠️ Make sure this URL matches your Render Dashboard exactly!
 const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
 
 const Manager: React.FC = () => {
-
   const [orders, setOrders] = useState<any[]>([]);
   const [password, setPassword] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // LOGIN
+  // Helper for Headers
+  const getHeaders = () => ({
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${localStorage.getItem("token")}`
+  });
+
+  // 🚪 LOGOUT
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    setLoggedIn(false);
+    setOrders([]);
+  };
+
+  // 📥 FETCH ORDERS (Wrapped in useCallback to prevent infinite loops)
+  const fetchOrders = useCallback(async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      setIsRefreshing(true);
+      const res = await fetch(`${BACKEND_URL}/api/orders`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const data = await res.json();
+
+      // PROTECT AGAINST .MAP() CRASH
+      if (Array.isArray(data)) {
+        setOrders(data);
+      } else if (data && Array.isArray(data.orders)) {
+        setOrders(data.orders);
+      } else {
+        console.error("Backend sent non-array data:", data);
+        setOrders([]);
+      }
+    } catch (err) {
+      console.error("Network error fetching orders");
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  // 🔑 LOGIN
   const handleLogin = async () => {
-    const res = await fetch(`${BACKEND_URL}/api/admin/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ password })
-    });
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password })
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (res.ok) {
-      localStorage.setItem("token", data.token);
-      setLoggedIn(true);
-    } else {
-      alert("Wrong password");
+      if (res.ok) {
+        localStorage.setItem("token", data.token);
+        setLoggedIn(true);
+        fetchOrders();
+      } else {
+        alert(data.message || "Wrong password");
+      }
+    } catch (err) {
+      alert("Could not connect to server.");
     }
   };
 
-  // FETCH ORDERS
-  const fetchOrders = async () => {
-    const token = localStorage.getItem("token");
-
-    const res = await fetch(`${BACKEND_URL}/api/orders`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
-
-    const data = await res.json();
-    setOrders(data);
-  };
-
+  // 🔄 POLLING EFFECT
   useEffect(() => {
     const token = localStorage.getItem("token");
-
     if (token) {
       setLoggedIn(true);
       fetchOrders();
     }
 
-    const interval = setInterval(fetchOrders, 5000);
+    // Only set interval if logged in to save resources
+    let interval: any;
+    if (loggedIn || token) {
+      interval = setInterval(fetchOrders, 5000);
+    }
+
     return () => clearInterval(interval);
-  }, []);
+  }, [loggedIn, fetchOrders]);
 
-  // 🚚 DELIVERY UPDATE
+  // 🚚 ACTIONS (Delivery, Archive, Delete)
   const updateDelivery = async (orderId: number, status: string) => {
-    const token = localStorage.getItem("token");
-
     await fetch(`${BACKEND_URL}/api/update-delivery`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        order_id: orderId,
-        status
-      })
+      headers: getHeaders(),
+      body: JSON.stringify({ order_id: orderId, status })
     });
-
     fetchOrders();
   };
 
-  // 🗃️ ARCHIVE
   const archiveOrder = async (orderId: number) => {
-    const token = localStorage.getItem("token");
-
     await fetch(`${BACKEND_URL}/api/archive-order`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      },
+      headers: getHeaders(),
       body: JSON.stringify({ order_id: orderId })
     });
-
     fetchOrders();
   };
 
-  // ❌ DELETE
   const deleteOrder = async (orderId: number) => {
-    const token = localStorage.getItem("token");
-
     if (!window.confirm("Delete permanently?")) return;
-
     await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
     });
-
     fetchOrders();
   };
 
-  // LOGIN SCREEN
+  // 🔒 LOGIN SCREEN
   if (!loggedIn) {
     return (
-      <div style={{ textAlign: "center", marginTop: 100 }}>
+      <div style={{ textAlign: "center", marginTop: 100, fontFamily: 'sans-serif' }}>
         <h1>Manager Login</h1>
-
         <input
           type="password"
           placeholder="Enter password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          style={{ padding: 10, marginTop: 20 }}
+          onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+          style={{ padding: 10, width: 200 }}
         />
-
         <br />
-
-        <button
-          onClick={handleLogin}
-          style={{ marginTop: 20, padding: 10 }}
-        >
+        <button onClick={handleLogin} style={{ marginTop: 20, padding: "10px 20px" }}>
           Login
         </button>
       </div>
     );
   }
 
-  // DASHBOARD
+  // 📊 DASHBOARD
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Manager Dashboard</h1>
+    <div style={{ padding: 20, fontFamily: 'sans-serif' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <h1>Manager Dashboard {isRefreshing && <small style={{fontSize: '0.5em'}}>Refreshing...</small>}</h1>
+        <button onClick={handleLogout} style={{ height: 30, marginTop: 20 }}>Logout</button>
+      </div>
 
-      {orders.map(order => (
-        <div key={order.id} style={{ border: "1px solid black", margin: 10, padding: 10 }}>
+      {Array.isArray(orders) && orders.length > 0 ? (
+        orders.map(order => (
+          <div key={order.id} style={{ border: "1px solid #ccc", borderRadius: 8, margin: "10px 0", padding: 15, backgroundColor: '#f9f9f9' }}>
+            <p><b>Order:</b> #{order.id}</p>
+            <p><b>Items:</b> {order.item_ordered}</p>
+            <p><b>Price:</b> R{order.price}</p>
+            <p><b>Status:</b> <span style={{ color: 'blue' }}>{order.delivery_status}</span> ({order.payment_status})</p>
+            <p><b>Address:</b> {order.address}</p>
 
-          <p><b>Order:</b> {order.id}</p>
-          <p><b>Items:</b> {order.item_ordered}</p>
-          <p><b>Price:</b> R{order.price}</p>
-          <p><b>Phone:</b> {order.phone}</p>
-          <p><b>Type:</b> {order.delivery_type}</p>
-          <p><b>Address:</b> {order.address}</p>
+            <div style={{ marginTop: 10 }}>
+              {order.payment_status === "paid" && order.delivery_status === "pending" && (
+                <button onClick={() => updateDelivery(order.id, "out_for_delivery")} style={{ marginRight: 5, background: 'green', color: 'white' }}>
+                  Start Delivery
+                </button>
+              )}
 
-          <p><b>Payment:</b> {order.payment_status}</p>
-          <p><b>Status:</b> {order.delivery_status}</p>
+              {order.delivery_status === "out_for_delivery" && (
+                <button onClick={() => updateDelivery(order.id, "delivered")} style={{ marginRight: 5, background: 'blue', color: 'white' }}>
+                  Mark Delivered
+                </button>
+              )}
 
-          {/* DELIVERY BUTTONS */}
-          {order.payment_status === "paid" && order.delivery_status === "pending" && (
-            <button onClick={() => updateDelivery(order.id, "out_for_delivery")}>
-              Start Delivery
-            </button>
-          )}
-
-          {order.delivery_status === "out_for_delivery" && (
-            <button onClick={() => updateDelivery(order.id, "delivered")}>
-              Mark Delivered
-            </button>
-          )}
-
-          <br /><br />
-
-          {/* 🗃️ ARCHIVE */}
-          <button
-            onClick={() => archiveOrder(order.id)}
-            style={{ marginRight: 10 }}
-          >
-            Archive
-          </button>
-
-          {/* ❌ DELETE */}
-          <button
-            onClick={() => deleteOrder(order.id)}
-            style={{ background: "red", color: "white" }}
-          >
-            Delete
-          </button>
-
-        </div>
-      ))}
+              <button onClick={() => archiveOrder(order.id)} style={{ marginRight: 5 }}>Archive</button>
+              <button onClick={() => deleteOrder(order.id)} style={{ background: "red", color: "white" }}>Delete</button>
+            </div>
+          </div>
+        ))
+      ) : (
+        <p>No active orders found.</p>
+      )}
     </div>
   );
 };
