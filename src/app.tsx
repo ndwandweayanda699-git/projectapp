@@ -103,7 +103,7 @@ const App: React.FC = () => {
           Blue <span className="text-blue-600">Plate</span> Special
         </h1>
 
-        {/* 🔥 MANAGER BUTTON */}
+        {/* MANAGER BUTTON */}
         <button
           onClick={() => navigate("/manager")}
           className="absolute top-6 right-6 bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800"
@@ -111,9 +111,9 @@ const App: React.FC = () => {
           Manager
         </button>
 
-        {/* 🔥 NEW KITCHEN BUTTON */}
+        {/* ✅ FIXED: GO TO LOGIN FIRST */}
         <button
-          onClick={() => navigate("/kitchen")}
+          onClick={() => navigate("/kitchen-login")}
           className="absolute top-6 right-32 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
         >
           Kitchen

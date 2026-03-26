@@ -99,13 +99,11 @@ app.post('/api/orders', async (req, res) => {
 // 🍳 KITCHEN ACCESS (NO AUTH)
 // ==============================
 
-// 🔥 Kitchen fetch orders (NO verifyAdmin)
+// ✅ FIXED: return ALL orders (no filter)
 app.get('/api/kitchen/orders', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT * FROM orders
-       WHERE delivery_status != 'ready'
-       ORDER BY id DESC`
+      `SELECT * FROM orders ORDER BY id DESC`
     );
     res.json(result.rows);
   } catch (err) {
