@@ -11,12 +11,12 @@ const app = express();
 // 🔐 CONFIG
 // ==============================
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "sizakala123";
+const KITCHEN_PASSWORD = process.env.KITCHEN_PASSWORD || "kitchen123";
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 
 // ==============================
 // 🚨 MIDDLEWARE
 // ==============================
-
 app.use('/webhook/yoco', express.raw({ type: '*/*' }));
 app.use(express.json());
 
@@ -32,15 +32,35 @@ app.use((req, res, next) => {
 });
 
 // ==============================
-// 🔐 AUTH
+// 🔐 AUTH MIDDLEWARE
 // ==============================
+
+// ✅ ADMIN VERIFY
 const verifyAdmin = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ error: "No token" });
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.admin = decoded;
+    if (decoded.role !== "admin") {
+      return res.status(403).json({ error: "Not admin" });
+    }
+    next();
+  } catch {
+    res.status(403).json({ error: "Invalid token" });
+  }
+};
+
+// ✅ KITCHEN VERIFY
+const verifyKitchen = (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "No token" });
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== "kitchen") {
+      return res.status(403).json({ error: "Not kitchen" });
+    }
     next();
   } catch {
     res.status(403).json({ error: "Invalid token" });
@@ -48,14 +68,30 @@ const verifyAdmin = (req, res, next) => {
 };
 
 // ==============================
-// 🔐 LOGIN
+// 🔐 LOGIN ROUTES
 // ==============================
+
+// 👨‍💼 ADMIN LOGIN
 app.post("/api/admin/login", (req, res) => {
   const { password } = req.body;
+
   if (password !== ADMIN_PASSWORD) {
     return res.status(401).json({ error: "Wrong password" });
   }
+
   const token = jwt.sign({ role: "admin" }, JWT_SECRET, { expiresIn: "4h" });
+  res.json({ token });
+});
+
+// 🍳 KITCHEN LOGIN
+app.post("/api/kitchen/login", (req, res) => {
+  const { password } = req.body;
+
+  if (password !== KITCHEN_PASSWORD) {
+    return res.status(401).json({ error: "Wrong kitchen password" });
+  }
+
+  const token = jwt.sign({ role: "kitchen" }, JWT_SECRET, { expiresIn: "8h" });
   res.json({ token });
 });
 
@@ -91,16 +127,17 @@ app.post('/api/orders', async (req, res) => {
 
     res.json({ order: result.rows[0] });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Create failed" });
   }
 });
 
 // ==============================
-// 🍳 KITCHEN ACCESS (NO AUTH)
+// 🍳 KITCHEN ROUTES (PROTECTED)
 // ==============================
 
-// ✅ FIXED: return ALL orders (no filter)
-app.get('/api/kitchen/orders', async (req, res) => {
+// 🔥 GET ALL ORDERS
+app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT * FROM orders ORDER BY id DESC`
@@ -111,8 +148,8 @@ app.get('/api/kitchen/orders', async (req, res) => {
   }
 });
 
-// 🔥 Kitchen updates order status
-app.put('/api/kitchen/orders/:id', async (req, res) => {
+// 🔥 UPDATE STATUS
+app.put('/api/kitchen/orders/:id', verifyKitchen, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -132,6 +169,7 @@ app.put('/api/kitchen/orders/:id', async (req, res) => {
 // 🔐 ADMIN ROUTES
 // ==============================
 
+// 📋 GET ALL ORDERS
 app.get('/api/orders', verifyAdmin, async (req, res) => {
   try {
     const result = await pool.query(`SELECT * FROM orders ORDER BY id DESC`);
@@ -141,32 +179,44 @@ app.get('/api/orders', verifyAdmin, async (req, res) => {
   }
 });
 
+// 🚚 UPDATE DELIVERY
 app.post('/api/update-delivery', verifyAdmin, async (req, res) => {
   const { order_id, status } = req.body;
+
   try {
     const result = await pool.query(
       `UPDATE orders SET delivery_status=$1 WHERE id=$2 RETURNING *`,
       [status, order_id]
     );
+
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: "Update failed" });
   }
 });
 
+// 📦 ARCHIVE ORDER
 app.post('/api/archive-order', verifyAdmin, async (req, res) => {
   const { order_id } = req.body;
+
   try {
-    await pool.query(`INSERT INTO orders_archive SELECT * FROM orders WHERE id = $1 ON CONFLICT (id) DO NOTHING`, [order_id]);
+    await pool.query(
+      `INSERT INTO orders_archive SELECT * FROM orders WHERE id = $1 ON CONFLICT (id) DO NOTHING`,
+      [order_id]
+    );
+
     await pool.query(`DELETE FROM orders WHERE id = $1`, [order_id]);
+
     res.json({ message: "Archived" });
   } catch (err) {
     res.status(500).json({ error: "Archive failed" });
   }
 });
 
+// ❌ DELETE ORDER
 app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
   const { id } = req.params;
+
   try {
     await pool.query(`DELETE FROM orders WHERE id=$1`, [id]);
     res.json({ message: "Deleted" });
@@ -178,7 +228,6 @@ app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
 // ==============================
 // 📦 FRONTEND
 // ==============================
-
 app.use(express.static(path.join(__dirname, 'dist')));
 
 app.get('*', (req, res) => {
@@ -186,7 +235,10 @@ app.get('*', (req, res) => {
 });
 
 // ==============================
-// 🚀 START
+// 🚀 START SERVER
 // ==============================
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Running on ${PORT}`));
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
