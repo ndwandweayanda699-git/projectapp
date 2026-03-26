@@ -12,7 +12,7 @@ const App: React.FC = () => {
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
 
-  const [deliveryType, setDeliveryType] = useState<"delivery" | "collection">("delivery"); // ✅ NEW
+  const [deliveryType, setDeliveryType] = useState<"delivery" | "collection">("delivery");
 
   const filteredItems = MENU_ITEMS.filter((item) =>
     item.name.toLowerCase().includes(search.toLowerCase())
@@ -33,13 +33,11 @@ const App: React.FC = () => {
       return;
     }
 
-    // ✅ ONLY require address if delivery
     if (deliveryType === "delivery" && !address.trim()) {
       alert("Please enter delivery address!");
       return;
     }
 
-    // ✅ phone required for both
     if (!phone.trim()) {
       alert("Please enter phone number!");
       return;
@@ -61,9 +59,9 @@ const App: React.FC = () => {
           item_ordered: itemOrdered,
           price: totalAmount,
           payment_method: "yoco",
-          address: deliveryType === "delivery" ? address : "COLLECTION", // ✅ IMPORTANT
+          address: deliveryType === "delivery" ? address : "COLLECTION",
           phone: phone,
-          delivery_type: deliveryType // ✅ optional (good for DB later)
+          delivery_type: deliveryType
         })
       });
 
@@ -105,12 +103,22 @@ const App: React.FC = () => {
           Blue <span className="text-blue-600">Plate</span> Special
         </h1>
 
+        {/* 🔥 MANAGER BUTTON */}
         <button
           onClick={() => navigate("/manager")}
           className="absolute top-6 right-6 bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800"
         >
           Manager
         </button>
+
+        {/* 🔥 NEW KITCHEN BUTTON */}
+        <button
+          onClick={() => navigate("/kitchen")}
+          className="absolute top-6 right-32 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+        >
+          Kitchen
+        </button>
+
       </header>
 
       <main className="max-w-6xl mx-auto px-4 pb-20">
@@ -162,7 +170,7 @@ const App: React.FC = () => {
             Total: R{cart.reduce((t, i) => t + i.price, 0)}
           </p>
 
-          {/* ✅ DELIVERY TYPE SWITCH */}
+          {/* DELIVERY TYPE */}
           <div className="mt-4">
             <label>
               <input
@@ -183,7 +191,7 @@ const App: React.FC = () => {
             </label>
           </div>
 
-          {/* ADDRESS ONLY IF DELIVERY */}
+          {/* ADDRESS */}
           {deliveryType === "delivery" && (
             <input
               type="text"

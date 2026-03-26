@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
 const jwt = require("jsonwebtoken");
-const path = require('path'); // Required for static files
+const path = require('path');
 
 const app = express();
 
@@ -17,26 +17,22 @@ const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 // 🚨 MIDDLEWARE
 // ==============================
 
-// 🔥 RAW body for Yoco ONLY
 app.use('/webhook/yoco', express.raw({ type: '*/*' }));
-
 app.use(express.json());
 
-// 🛡️ UPDATED CORS
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-// Log requests
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
   next();
 });
 
 // ==============================
-// 🔐 AUTH MIDDLEWARE
+// 🔐 AUTH
 // ==============================
 const verifyAdmin = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
@@ -72,27 +68,71 @@ const pool = new Pool({
 });
 
 // ==============================
-// 🟢 API ROUTES
+// 🟢 CUSTOMER ORDER
 // ==============================
-
 app.post('/api/orders', async (req, res) => {
   const { user_id, item_ordered, price, payment_method, address, phone, delivery_type } = req.body;
+
   if (!user_id || !item_ordered || !price || !payment_method || !phone) {
     return res.status(400).json({ error: "Missing fields" });
   }
+
   const finalAddress = delivery_type === "collection" ? "COLLECTION" : address || "COLLECTION";
   const finalDeliveryType = delivery_type || "collection";
+
   try {
     const result = await pool.query(
-      `INSERT INTO orders (user_id, item_ordered, price, payment_method, payment_status, address, phone, delivery_status, delivery_type, created_at)
-      VALUES ($1,$2,$3,$4,'pending',$5,$6,'pending',$7,NOW()) RETURNING *`,
+      `INSERT INTO orders
+      (user_id, item_ordered, price, payment_method, payment_status, address, phone, delivery_status, delivery_type, created_at)
+      VALUES ($1,$2,$3,$4,'pending',$5,$6,'pending',$7,NOW())
+      RETURNING *`,
       [user_id, item_ordered, price, payment_method, finalAddress, phone, finalDeliveryType]
     );
+
     res.json({ order: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: "Create failed" });
   }
 });
+
+// ==============================
+// 🍳 KITCHEN ACCESS (NO AUTH)
+// ==============================
+
+// 🔥 Kitchen fetch orders (NO verifyAdmin)
+app.get('/api/kitchen/orders', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM orders
+       WHERE delivery_status != 'ready'
+       ORDER BY id DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Kitchen fetch failed" });
+  }
+});
+
+// 🔥 Kitchen updates order status
+app.put('/api/kitchen/orders/:id', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  try {
+    const result = await pool.query(
+      `UPDATE orders SET delivery_status=$1 WHERE id=$2 RETURNING *`,
+      [status, id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: "Kitchen update failed" });
+  }
+});
+
+// ==============================
+// 🔐 ADMIN ROUTES
+// ==============================
 
 app.get('/api/orders', verifyAdmin, async (req, res) => {
   try {
@@ -106,7 +146,10 @@ app.get('/api/orders', verifyAdmin, async (req, res) => {
 app.post('/api/update-delivery', verifyAdmin, async (req, res) => {
   const { order_id, status } = req.body;
   try {
-    const result = await pool.query(`UPDATE orders SET delivery_status=$1 WHERE id=$2 RETURNING *`, [status, order_id]);
+    const result = await pool.query(
+      `UPDATE orders SET delivery_status=$1 WHERE id=$2 RETURNING *`,
+      [status, order_id]
+    );
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: "Update failed" });
@@ -135,13 +178,11 @@ app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
 });
 
 // ==============================
-// 📦 FRONTEND SERVING (The Fix)
+// 📦 FRONTEND
 // ==============================
 
-// 1. Serve the static files from the React build folder (dist)
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// 2. Handle ANY route by sending the index.html file (for React Router)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
