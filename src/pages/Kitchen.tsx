@@ -5,8 +5,8 @@ const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
 
 const Kitchen: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
-  const [knownOrderIds, setKnownOrderIds] = useState<number[]>([]); // 🔔 track orders
-  const audioRef = useRef<HTMLAudioElement | null>(null); // 🔊 audio ref
+  const [knownOrderIds, setKnownOrderIds] = useState<number[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const navigate = useNavigate();
 
@@ -20,17 +20,23 @@ const Kitchen: React.FC = () => {
     }
   }, [token, navigate]);
 
-  // 🔊 LOAD SOUND ONCE
+  // 🔊 LOAD SOUND (FIXED SOURCE)
   useEffect(() => {
-    audioRef.current = new Audio("/alert.mp3");
+    audioRef.current = new Audio(
+      "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
+    );
+    audioRef.current.volume = 1; // 🔊 max volume
   }, []);
 
-  // 🔊 PLAY SOUND FUNCTION
+  // 🔊 PLAY SOUND
   const playSound = () => {
-    audioRef.current?.play().catch(() => {});
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0; // restart sound
+      audioRef.current.play().catch(() => {});
+    }
   };
 
-  // 🔓 UNLOCK SOUND (BROWSER REQUIREMENT)
+  // 🔓 UNLOCK SOUND (required for browsers)
   useEffect(() => {
     const unlockAudio = () => {
       audioRef.current?.play().catch(() => {});
@@ -63,12 +69,11 @@ const Kitchen: React.FC = () => {
         (order: any) => !knownOrderIds.includes(order.id)
       );
 
-      // 🚨 PLAY SOUND (NOT FIRST LOAD)
+      // 🔊 PLAY SOUND ONLY IF NEW ORDER ARRIVES
       if (newOrders.length > 0 && knownOrderIds.length > 0) {
         playSound();
       }
 
-      // 🔄 UPDATE STATE
       setKnownOrderIds(data.map((o: any) => o.id));
       setOrders(data);
     } catch (err) {
@@ -83,7 +88,7 @@ const Kitchen: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // 🔥 UPDATE STATUS (WITH TOKEN)
+  // 🔥 UPDATE STATUS
   const updateStatus = async (id: number, status: string) => {
     try {
       await fetch(`${BACKEND_URL}/api/kitchen/orders/${id}`, {
@@ -114,7 +119,7 @@ const Kitchen: React.FC = () => {
     <div style={{ padding: 20 }}>
       <h1>🍳 Kitchen Dashboard</h1>
 
-      {/* 🔐 LOGOUT BUTTON */}
+      {/* 🔐 LOGOUT */}
       <button
         onClick={() => {
           localStorage.removeItem("kitchen_token");
