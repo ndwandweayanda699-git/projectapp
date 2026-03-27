@@ -7,7 +7,9 @@ const Kitchen: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
 
-  const prevOrderIdsRef = useRef<number[]>([]); // ✅ FIX
+  const prevOrderIdsRef = useRef<number[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null); // ✅ SINGLE AUDIO
+
   const navigate = useNavigate();
   const token = localStorage.getItem("kitchen_token");
 
@@ -18,19 +20,32 @@ const Kitchen: React.FC = () => {
     }
   }, [token, navigate]);
 
-  // 🔊 PLAY SOUND (FORCED)
-  const playSound = () => {
-    if (!soundEnabled) return;
-
-    const sound = new Audio(
+  // 🔊 LOAD AUDIO ONCE
+  useEffect(() => {
+    audioRef.current = new Audio(
       "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
     );
+    audioRef.current.volume = 1;
+    audioRef.current.preload = "auto";
+  }, []);
 
-    sound.volume = 1;
+  // 🔊 PLAY SOUND (FIXED)
+  const playSound = () => {
+    if (!soundEnabled || !audioRef.current) return;
 
-    sound.play().catch((err) => {
-      console.log("Sound failed:", err);
-    });
+    try {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+
+      audioRef.current.play().then(() => {
+        console.log("🔊 SOUND PLAYED");
+      }).catch((err) => {
+        console.log("❌ Sound blocked:", err);
+      });
+
+    } catch (err) {
+      console.log("Sound error:", err);
+    }
   };
 
   // 🔥 Fetch orders
@@ -53,7 +68,7 @@ const Kitchen: React.FC = () => {
       const prevIds = prevOrderIdsRef.current;
       const currentIds = data.map((o: any) => o.id);
 
-      // ✅ TRUE new order detection
+      // ✅ Detect NEW orders properly
       const hasNewOrder = currentIds.some(
         (id) => !prevIds.includes(id)
       );
@@ -63,10 +78,9 @@ const Kitchen: React.FC = () => {
         playSound();
       }
 
-      // ✅ update instantly (NO delay)
       prevOrderIdsRef.current = currentIds;
-
       setOrders(data);
+
     } catch (err) {
       console.error("Error fetching orders:", err);
     }
@@ -109,15 +123,16 @@ const Kitchen: React.FC = () => {
     <div style={{ padding: 20 }}>
       <h1>🍳 Kitchen Dashboard</h1>
 
-      {/* 🔊 Enable Sound (REAL FIX) */}
+      {/* 🔊 ENABLE SOUND (CRITICAL FIX) */}
       {!soundEnabled && (
         <button
           onClick={() => {
-            const test = new Audio(
-              "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
-            );
+            if (!audioRef.current) return;
 
-            test.play().then(() => {
+            audioRef.current.play().then(() => {
+              audioRef.current?.pause();
+              audioRef.current.currentTime = 0;
+
               setSoundEnabled(true);
               alert("Sound Enabled ✅");
             }).catch(() => {
