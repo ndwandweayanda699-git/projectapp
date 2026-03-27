@@ -6,6 +6,7 @@ const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
 const Kitchen: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [knownOrderIds, setKnownOrderIds] = useState<number[]>([]);
+  const [soundEnabled, setSoundEnabled] = useState(false); // ✅ NEW
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const navigate = useNavigate();
@@ -20,33 +21,23 @@ const Kitchen: React.FC = () => {
     }
   }, [token, navigate]);
 
-  // 🔊 LOAD SOUND (FIXED SOURCE)
+  // 🔊 LOAD SOUND
   useEffect(() => {
     audioRef.current = new Audio(
       "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
     );
-    audioRef.current.volume = 1; // 🔊 max volume
+    audioRef.current.volume = 1;
   }, []);
 
   // 🔊 PLAY SOUND
   const playSound = () => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0; // restart sound
+    if (audioRef.current && soundEnabled) {
+      audioRef.current.currentTime = 0;
       audioRef.current.play().catch(() => {});
     }
   };
 
-  // 🔓 UNLOCK SOUND (required for browsers)
-  useEffect(() => {
-    const unlockAudio = () => {
-      audioRef.current?.play().catch(() => {});
-      window.removeEventListener("click", unlockAudio);
-    };
-
-    window.addEventListener("click", unlockAudio);
-  }, []);
-
-  // 🔥 FETCH ORDERS (WITH SOUND LOGIC)
+  // 🔥 FETCH ORDERS
   const fetchOrders = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/kitchen/orders`, {
@@ -55,7 +46,6 @@ const Kitchen: React.FC = () => {
         },
       });
 
-      // 🚨 if token invalid → kick out
       if (res.status === 401 || res.status === 403) {
         localStorage.removeItem("kitchen_token");
         navigate("/kitchen-login");
@@ -69,7 +59,7 @@ const Kitchen: React.FC = () => {
         (order: any) => !knownOrderIds.includes(order.id)
       );
 
-      // 🔊 PLAY SOUND ONLY IF NEW ORDER ARRIVES
+      // 🔊 PLAY SOUND ONLY AFTER ENABLED
       if (newOrders.length > 0 && knownOrderIds.length > 0) {
         playSound();
       }
@@ -118,6 +108,33 @@ const Kitchen: React.FC = () => {
   return (
     <div style={{ padding: 20 }}>
       <h1>🍳 Kitchen Dashboard</h1>
+
+      {/* 🔊 ENABLE SOUND BUTTON (EXACT PLACE) */}
+      {!soundEnabled && (
+        <button
+          onClick={() => {
+            if (audioRef.current) {
+              audioRef.current.play().then(() => {
+                audioRef.current?.pause();
+                audioRef.current.currentTime = 0;
+                setSoundEnabled(true);
+                alert("Sound Enabled ✅");
+              }).catch(() => {});
+            }
+          }}
+          style={{
+            marginBottom: 10,
+            padding: "8px 12px",
+            background: "orange",
+            color: "black",
+            borderRadius: 5,
+            border: "none",
+            cursor: "pointer"
+          }}
+        >
+          🔊 Enable Sound
+        </button>
+      )}
 
       {/* 🔐 LOGOUT */}
       <button
