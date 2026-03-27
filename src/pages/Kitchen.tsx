@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
 
 const Kitchen: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
+  const [knownOrderIds, setKnownOrderIds] = useState<number[]>([]); // 🔔 track orders
+  const audioRef = useRef<HTMLAudioElement | null>(null); // 🔊 audio ref
+
   const navigate = useNavigate();
 
   // 🔐 GET TOKEN
@@ -17,13 +20,33 @@ const Kitchen: React.FC = () => {
     }
   }, [token, navigate]);
 
-  // 🔥 FETCH ORDERS (WITH TOKEN)
+  // 🔊 LOAD SOUND ONCE
+  useEffect(() => {
+    audioRef.current = new Audio("/alert.mp3");
+  }, []);
+
+  // 🔊 PLAY SOUND FUNCTION
+  const playSound = () => {
+    audioRef.current?.play().catch(() => {});
+  };
+
+  // 🔓 UNLOCK SOUND (BROWSER REQUIREMENT)
+  useEffect(() => {
+    const unlockAudio = () => {
+      audioRef.current?.play().catch(() => {});
+      window.removeEventListener("click", unlockAudio);
+    };
+
+    window.addEventListener("click", unlockAudio);
+  }, []);
+
+  // 🔥 FETCH ORDERS (WITH SOUND LOGIC)
   const fetchOrders = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/kitchen/orders`, {
         headers: {
-          Authorization: `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       // 🚨 if token invalid → kick out
@@ -34,12 +57,26 @@ const Kitchen: React.FC = () => {
       }
 
       const data = await res.json();
+
+      // 🔔 DETECT NEW ORDERS
+      const newOrders = data.filter(
+        (order: any) => !knownOrderIds.includes(order.id)
+      );
+
+      // 🚨 PLAY SOUND (NOT FIRST LOAD)
+      if (newOrders.length > 0 && knownOrderIds.length > 0) {
+        playSound();
+      }
+
+      // 🔄 UPDATE STATE
+      setKnownOrderIds(data.map((o: any) => o.id));
       setOrders(data);
     } catch (err) {
       console.error("Error fetching orders:", err);
     }
   };
 
+  // 🔁 AUTO REFRESH
   useEffect(() => {
     fetchOrders();
     const interval = setInterval(fetchOrders, 3000);
@@ -53,7 +90,7 @@ const Kitchen: React.FC = () => {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ status }),
       });
@@ -90,7 +127,7 @@ const Kitchen: React.FC = () => {
           padding: "8px 12px",
           background: "black",
           color: "white",
-          borderRadius: 5
+          borderRadius: 5,
         }}
       >
         Logout
