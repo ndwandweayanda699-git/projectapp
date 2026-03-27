@@ -6,22 +6,21 @@ const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
 const Kitchen: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [knownOrderIds, setKnownOrderIds] = useState<number[]>([]);
-  const [soundEnabled, setSoundEnabled] = useState(false); // ✅ NEW
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const navigate = useNavigate();
 
-  // 🔐 GET TOKEN
   const token = localStorage.getItem("kitchen_token");
 
-  // 🚨 REDIRECT IF NOT LOGGED IN
+  // 🚨 Redirect if not logged in
   useEffect(() => {
     if (!token) {
       navigate("/kitchen-login");
     }
   }, [token, navigate]);
 
-  // 🔊 LOAD SOUND
+  // 🔊 Load sound
   useEffect(() => {
     audioRef.current = new Audio(
       "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
@@ -29,15 +28,17 @@ const Kitchen: React.FC = () => {
     audioRef.current.volume = 1;
   }, []);
 
-  // 🔊 PLAY SOUND
+  // 🔊 Play sound
   const playSound = () => {
     if (audioRef.current && soundEnabled) {
       audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(() => {});
+      audioRef.current.play().catch((err) => {
+        console.log("Sound failed:", err);
+      });
     }
   };
 
-  // 🔥 FETCH ORDERS
+  // 🔥 Fetch orders
   const fetchOrders = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/kitchen/orders`, {
@@ -54,13 +55,14 @@ const Kitchen: React.FC = () => {
 
       const data = await res.json();
 
-      // 🔔 DETECT NEW ORDERS
+      // 🔔 Detect new orders
       const newOrders = data.filter(
         (order: any) => !knownOrderIds.includes(order.id)
       );
 
-      // 🔊 PLAY SOUND ONLY AFTER ENABLED
-      if (newOrders.length > 0 && knownOrderIds.length > 0) {
+      // ✅ FIXED: ALWAYS play if new order
+      if (newOrders.length > 0) {
+        console.log("🔔 NEW ORDER DETECTED");
         playSound();
       }
 
@@ -71,14 +73,14 @@ const Kitchen: React.FC = () => {
     }
   };
 
-  // 🔁 AUTO REFRESH
+  // 🔁 Auto refresh
   useEffect(() => {
     fetchOrders();
     const interval = setInterval(fetchOrders, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  // 🔥 UPDATE STATUS
+  // 🔥 Update status
   const updateStatus = async (id: number, status: string) => {
     try {
       await fetch(`${BACKEND_URL}/api/kitchen/orders/${id}`, {
@@ -96,7 +98,6 @@ const Kitchen: React.FC = () => {
     }
   };
 
-  // 🔥 SPLIT ORDERS
   const activeOrders = orders.filter(
     (o) => o.delivery_status !== "ready"
   );
@@ -109,7 +110,7 @@ const Kitchen: React.FC = () => {
     <div style={{ padding: 20 }}>
       <h1>🍳 Kitchen Dashboard</h1>
 
-      {/* 🔊 ENABLE SOUND BUTTON (EXACT PLACE) */}
+      {/* 🔊 Enable Sound */}
       {!soundEnabled && (
         <button
           onClick={() => {
@@ -119,7 +120,7 @@ const Kitchen: React.FC = () => {
                 audioRef.current.currentTime = 0;
                 setSoundEnabled(true);
                 alert("Sound Enabled ✅");
-              }).catch(() => {});
+              });
             }
           }}
           style={{
@@ -129,14 +130,14 @@ const Kitchen: React.FC = () => {
             color: "black",
             borderRadius: 5,
             border: "none",
-            cursor: "pointer"
+            cursor: "pointer",
           }}
         >
           🔊 Enable Sound
         </button>
       )}
 
-      {/* 🔐 LOGOUT */}
+      {/* Logout */}
       <button
         onClick={() => {
           localStorage.removeItem("kitchen_token");
@@ -155,7 +156,7 @@ const Kitchen: React.FC = () => {
         Logout
       </button>
 
-      {/* 🔥 ACTIVE ORDERS */}
+      {/* Active Orders */}
       <h2 style={{ marginTop: 20 }}>🟡 Active Orders</h2>
 
       {activeOrders.length === 0 ? (
@@ -212,7 +213,7 @@ const Kitchen: React.FC = () => {
         </div>
       )}
 
-      {/* 🔥 COMPLETED ORDERS */}
+      {/* Completed Orders */}
       <h2 style={{ marginTop: 40 }}>✅ Completed Orders</h2>
 
       {completedOrders.length === 0 ? (
