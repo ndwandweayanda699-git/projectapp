@@ -1,41 +1,60 @@
 require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
 const jwt = require("jsonwebtoken");
 const path = require('path');
+const crypto = require("crypto");
 
 const app = express();
 
 // ==============================
 // 🔐 CONFIG
 // ==============================
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "sizakala123";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const KITCHEN_PASSWORD = process.env.KITCHEN_PASSWORD || "kitchen123";
-const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
+const JWT_SECRET = process.env.JWT_SECRET;
+
+const YOCO_WEBHOOK_SECRET = process.env.YOCO_WEBHOOK_SECRET;
+
+// 🚨 FAIL FAST IF MISSING
+if (!YOCO_WEBHOOK_SECRET) {
+  console.error("❌ Missing YOCO_WEBHOOK_SECRET");
+  process.exit(1);
+}
 
 // ==============================
 // 🚨 MIDDLEWARE
 // ==============================
+
+// 🔥 RAW BODY FOR WEBHOOK
 app.use('/webhook/yoco', express.raw({ type: '*/*' }));
+
 app.use(express.json());
 
 app.use(cors({
   origin: "*",
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
+// 🔍 DEBUG LOGS
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url}`);
+  console.log(`➡️ ${req.method} ${req.url}`);
   next();
 });
 
 // ==============================
-// 🔐 AUTH MIDDLEWARE
+// 🗄️ DATABASE
+// ==============================
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
+// ==============================
+// 🔐 AUTH
 // ==============================
 
-// ✅ ADMIN VERIFY
 const verifyAdmin = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ error: "No token" });
@@ -51,7 +70,6 @@ const verifyAdmin = (req, res, next) => {
   }
 };
 
-// ✅ KITCHEN VERIFY
 const verifyKitchen = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ error: "No token" });
@@ -68,14 +86,11 @@ const verifyKitchen = (req, res, next) => {
 };
 
 // ==============================
-// 🔐 LOGIN ROUTES
+// 🔐 LOGIN
 // ==============================
 
-// 👨‍💼 ADMIN LOGIN
 app.post("/api/admin/login", (req, res) => {
-  const { password } = req.body;
-
-  if (password !== ADMIN_PASSWORD) {
+  if (req.body.password !== ADMIN_PASSWORD) {
     return res.status(401).json({ error: "Wrong password" });
   }
 
@@ -83,12 +98,9 @@ app.post("/api/admin/login", (req, res) => {
   res.json({ token });
 });
 
-// 🍳 KITCHEN LOGIN
 app.post("/api/kitchen/login", (req, res) => {
-  const { password } = req.body;
-
-  if (password !== KITCHEN_PASSWORD) {
-    return res.status(401).json({ error: "Wrong kitchen password" });
+  if (req.body.password !== KITCHEN_PASSWORD) {
+    return res.status(401).json({ error: "Wrong password" });
   }
 
   const token = jwt.sign({ role: "kitchen" }, JWT_SECRET, { expiresIn: "8h" });
@@ -96,138 +108,141 @@ app.post("/api/kitchen/login", (req, res) => {
 });
 
 // ==============================
-// 🗄️ DATABASE
+// 🟢 CREATE ORDER (UNPAID)
 // ==============================
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
 
-// ==============================
-// 🟢 CUSTOMER ORDER
-// ==============================
 app.post('/api/orders', async (req, res) => {
-  const { user_id, item_ordered, price, payment_method, address, phone, delivery_type } = req.body;
+  const { user_id, item_ordered, price, payment_method } = req.body;
 
-  if (!user_id || !item_ordered || !price || !payment_method || !phone) {
+  if (!user_id || !item_ordered || !price) {
     return res.status(400).json({ error: "Missing fields" });
   }
-
-  const finalAddress = delivery_type === "collection" ? "COLLECTION" : address || "COLLECTION";
-  const finalDeliveryType = delivery_type || "collection";
 
   try {
     const result = await pool.query(
       `INSERT INTO orders
-      (user_id, item_ordered, price, payment_method, payment_status, address, phone, delivery_status, delivery_type, created_at)
-      VALUES ($1,$2,$3,$4,'pending',$5,$6,'pending',$7,NOW())
+      (user_id, item_ordered, price, payment_method, payment_status, delivery_status, created_at)
+      VALUES ($1,$2,$3,$4,'pending','pending',NOW())
       RETURNING *`,
-      [user_id, item_ordered, price, payment_method, finalAddress, phone, finalDeliveryType]
+      [user_id, item_ordered, price, payment_method]
     );
 
+    console.log("🧾 Order created:", result.rows[0].id);
+
     res.json({ order: result.rows[0] });
+
   } catch (err) {
-    console.error(err);
+    console.error("Create error:", err);
     res.status(500).json({ error: "Create failed" });
   }
 });
 
 // ==============================
-// 🍳 KITCHEN ROUTES (PROTECTED)
+// 💳 YOCO WEBHOOK (PRODUCTION SAFE)
 // ==============================
 
-// 🔥 GET ALL ORDERS
+app.post('/webhook/yoco', async (req, res) => {
+  console.log("📩 WEBHOOK HIT");
+
+  try {
+    const signature = req.headers['yoco-signature'];
+
+    if (!signature) {
+      console.log("❌ Missing signature");
+      return res.sendStatus(400);
+    }
+
+    // ✅ VERIFY SIGNATURE
+    const expectedSignature = crypto
+      .createHmac('sha256', YOCO_WEBHOOK_SECRET)
+      .update(req.body)
+      .digest('hex');
+
+    if (signature !== expectedSignature) {
+      console.log("❌ Invalid signature");
+      return res.sendStatus(400);
+    }
+
+    // ✅ PARSE EVENT
+    const event = JSON.parse(req.body.toString());
+
+    console.log("📦 FULL EVENT:", JSON.stringify(event, null, 2));
+
+    // ==============================
+    // ✅ PAYMENT SUCCESS
+    // ==============================
+    if (event.type === "payment.succeeded") {
+
+      const orderId = event.data?.metadata?.order_id;
+
+      console.log("📌 Metadata:", event.data?.metadata);
+
+      if (!orderId) {
+        console.log("⚠️ No order_id in metadata");
+        return res.sendStatus(200);
+      }
+
+      // ✅ PREVENT DUPLICATE PROCESSING
+      await pool.query(
+        `UPDATE orders
+         SET payment_status='paid'
+         WHERE id=$1 AND payment_status!='paid'`,
+        [orderId]
+      );
+
+      console.log(`✅ Order ${orderId} marked PAID`);
+    }
+
+    res.sendStatus(200);
+
+  } catch (err) {
+    console.error("🔥 Webhook error:", err);
+    res.sendStatus(500);
+  }
+});
+
+// ==============================
+// 🍳 KITCHEN (ONLY PAID)
+// ==============================
+
 app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT * FROM orders ORDER BY id DESC`
+      `SELECT * FROM orders
+       WHERE payment_status='paid'
+       ORDER BY id DESC`
     );
+
     res.json(result.rows);
   } catch (err) {
+    console.error("Kitchen error:", err);
     res.status(500).json({ error: "Kitchen fetch failed" });
   }
 });
 
-// 🔥 UPDATE STATUS
-app.put('/api/kitchen/orders/:id', verifyKitchen, async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body;
-
-  try {
-    const result = await pool.query(
-      `UPDATE orders SET delivery_status=$1 WHERE id=$2 RETURNING *`,
-      [status, id]
-    );
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: "Kitchen update failed" });
-  }
-});
-
 // ==============================
-// 🔐 ADMIN ROUTES
+// 👨‍💼 ADMIN (ONLY PAID)
 // ==============================
 
-// 📋 GET ALL ORDERS
 app.get('/api/orders', verifyAdmin, async (req, res) => {
   try {
-    const result = await pool.query(`SELECT * FROM orders ORDER BY id DESC`);
+    const result = await pool.query(
+      `SELECT * FROM orders
+       WHERE payment_status='paid'
+       ORDER BY id DESC`
+    );
+
     res.json(result.rows);
   } catch (err) {
+    console.error("Admin error:", err);
     res.status(500).json({ error: "Fetch failed" });
-  }
-});
-
-// 🚚 UPDATE DELIVERY
-app.post('/api/update-delivery', verifyAdmin, async (req, res) => {
-  const { order_id, status } = req.body;
-
-  try {
-    const result = await pool.query(
-      `UPDATE orders SET delivery_status=$1 WHERE id=$2 RETURNING *`,
-      [status, order_id]
-    );
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: "Update failed" });
-  }
-});
-
-// 📦 ARCHIVE ORDER
-app.post('/api/archive-order', verifyAdmin, async (req, res) => {
-  const { order_id } = req.body;
-
-  try {
-    await pool.query(
-      `INSERT INTO orders_archive SELECT * FROM orders WHERE id = $1 ON CONFLICT (id) DO NOTHING`,
-      [order_id]
-    );
-
-    await pool.query(`DELETE FROM orders WHERE id = $1`, [order_id]);
-
-    res.json({ message: "Archived" });
-  } catch (err) {
-    res.status(500).json({ error: "Archive failed" });
-  }
-});
-
-// ❌ DELETE ORDER
-app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    await pool.query(`DELETE FROM orders WHERE id=$1`, [id]);
-    res.json({ message: "Deleted" });
-  } catch (err) {
-    res.status(500).json({ error: "Delete failed" });
   }
 });
 
 // ==============================
 // 📦 FRONTEND
 // ==============================
+
 app.use(express.static(path.join(__dirname, 'dist')));
 
 app.get('*', (req, res) => {
@@ -237,6 +252,7 @@ app.get('*', (req, res) => {
 // ==============================
 // 🚀 START SERVER
 // ==============================
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {

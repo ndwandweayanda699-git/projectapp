@@ -3,6 +3,8 @@ import { MENU_ITEMS } from './lib/datasource';
 import Input from './components/ui/input';
 import { useNavigate } from "react-router-dom";
 
+const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
+
 const App: React.FC = () => {
 
   const navigate = useNavigate();
@@ -11,6 +13,7 @@ const App: React.FC = () => {
   const [cart, setCart] = useState<any[]>([]);
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const [deliveryType, setDeliveryType] = useState<"delivery" | "collection">("delivery");
 
@@ -28,6 +31,8 @@ const App: React.FC = () => {
 
   const handlePlaceOrder = async () => {
 
+    if (loading) return;
+
     if (cart.length === 0) {
       alert("Your cart is empty!");
       return;
@@ -43,13 +48,19 @@ const App: React.FC = () => {
       return;
     }
 
+    setLoading(true);
+
     const totalAmount = cart.reduce((sum, item) => sum + item.price, 0);
+    const amountInCents = Math.round(totalAmount * 100);
+
     const orderRef = "Order-" + Date.now();
     const itemOrdered = cart.map((item) => item.name).join(", ");
 
     try {
 
-      const response = await fetch("https://projectapp-backend-u0fx.onrender.com/api/orders", {
+      console.log("🧾 Creating order...");
+
+      const response = await fetch(`${BACKEND_URL}/api/orders`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -72,25 +83,36 @@ const App: React.FC = () => {
       const data = await response.json();
       const orderId = data?.order?.id;
 
+      console.log("✅ Order created:", orderId);
+
       if (!orderId) {
         alert("Order ID not returned");
+        setLoading(false);
         return;
       }
 
       const successUrl = `https://projectapp-sk4p.onrender.com/success?order_id=${orderId}`;
 
+      // 🔥 FINAL CORRECT YOCO URL
       const paymentUrl =
-        `https://pay.yoco.com/sizakala?amount=${totalAmount}` +
+        `https://pay.yoco.com/sizakala` +
+        `?amount=${amountInCents}` +
         `&reference=${orderRef}` +
-        `&metadata[order_id]=${orderId}` +
+        `&metadata[order_id]=${orderId}` +   // ✅ FIXED
         `&successUrl=${encodeURIComponent(successUrl)}` +
         `&cancelUrl=${encodeURIComponent(successUrl)}`;
+
+      console.log("➡️ Redirecting to Yoco:", paymentUrl);
+
+      // OPTIONAL: clear cart before redirect
+      setCart([]);
 
       window.location.href = paymentUrl;
 
     } catch (error) {
-      console.error(error);
-      alert("Order failed");
+      console.error("❌ Order failed:", error);
+      alert("Order failed. Try again.");
+      setLoading(false);
     }
   };
 
@@ -103,7 +125,6 @@ const App: React.FC = () => {
           Blue <span className="text-blue-600">Plate</span> Special
         </h1>
 
-        {/* MANAGER BUTTON */}
         <button
           onClick={() => navigate("/manager")}
           className="absolute top-6 right-6 bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800"
@@ -111,14 +132,12 @@ const App: React.FC = () => {
           Manager
         </button>
 
-        {/* ✅ FIXED: GO TO LOGIN FIRST */}
         <button
           onClick={() => navigate("/kitchen-login")}
           className="absolute top-6 right-32 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
         >
           Kitchen
         </button>
-
       </header>
 
       <main className="max-w-6xl mx-auto px-4 pb-20">
@@ -175,7 +194,6 @@ const App: React.FC = () => {
             <label>
               <input
                 type="radio"
-                value="delivery"
                 checked={deliveryType === "delivery"}
                 onChange={() => setDeliveryType("delivery")}
               /> Delivery
@@ -184,7 +202,6 @@ const App: React.FC = () => {
             <label className="ml-4">
               <input
                 type="radio"
-                value="collection"
                 checked={deliveryType === "collection"}
                 onChange={() => setDeliveryType("collection")}
               /> Collection
@@ -213,9 +230,10 @@ const App: React.FC = () => {
 
           <button
             onClick={handlePlaceOrder}
+            disabled={loading}
             className="mt-4 w-full bg-green-600 text-white p-4 rounded"
           >
-            Pay & Order
+            {loading ? "Processing..." : "Pay & Order"}
           </button>
 
         </div>

@@ -7,11 +7,12 @@ const Kitchen: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
 
-  // ✅ Initialize Audio immediately to avoid null checks during fast updates
   const audioRef = useRef<HTMLAudioElement>(
     new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg")
   );
-  const prevOrderIdsRef = useRef<number[]>([]);
+
+  // ✅ Use Set (better detection)
+  const prevOrderIdsRef = useRef<Set<number>>(new Set());
 
   const navigate = useNavigate();
   const token = localStorage.getItem("kitchen_token");
@@ -23,28 +24,33 @@ const Kitchen: React.FC = () => {
     }
   }, [token, navigate]);
 
-  // 🔊 Configure audio settings on mount
+  // 🔊 Configure audio
   useEffect(() => {
     audioRef.current.volume = 1;
     audioRef.current.preload = "auto";
   }, []);
 
-  // 🔊 PLAY SOUND (FIXED)
+  // 🔊 PLAY SOUND (Improved)
   const playSound = useCallback(() => {
     if (!soundEnabled) return;
 
     try {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
-      audioRef.current.play().catch((err) => {
-        console.warn("❌ Sound blocked by browser settings:", err);
-      });
+
+      const playPromise = audioRef.current.play();
+
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          console.warn("🔇 Browser blocked sound");
+        });
+      }
     } catch (err) {
       console.error("Sound error:", err);
     }
   }, [soundEnabled]);
 
-  // 🔥 Fetch orders (Memoized to prevent stale state in setInterval)
+  // 🔥 FETCH ORDERS
   const fetchOrders = useCallback(async () => {
     if (!token) return;
 
@@ -62,35 +68,45 @@ const Kitchen: React.FC = () => {
       }
 
       const data = await res.json();
+
       const prevIds = prevOrderIdsRef.current;
-      const currentIds = data.map((o: any) => o.id);
+      const currentIds = new Set(data.map((o: any) => o.id));
 
-      // ✅ Detect NEW orders properly
-      const hasNewOrder = currentIds.some((id) => !prevIds.includes(id));
+      // ✅ Detect new orders
+      let hasNewOrder = false;
 
-      if (hasNewOrder && prevIds.length > 0) {
-        console.log("🔔 NEW ORDER DETECTED");
+      currentIds.forEach((id) => {
+        if (!prevIds.has(id)) {
+          hasNewOrder = true;
+        }
+      });
+
+      // 🔔 Only play if NOT first load
+      if (hasNewOrder && prevIds.size > 0) {
+        console.log("🔔 NEW ORDER");
         playSound();
       }
 
       prevOrderIdsRef.current = currentIds;
+
       setOrders(data);
+
     } catch (err) {
-      console.error("Error fetching orders:", err);
+      console.error("Fetch error:", err);
     }
   }, [token, navigate, playSound]);
 
-  // 🔁 Auto refresh (Correctly depends on fetchOrders)
+  // 🔁 AUTO REFRESH
   useEffect(() => {
     fetchOrders();
     const interval = setInterval(fetchOrders, 3000);
     return () => clearInterval(interval);
   }, [fetchOrders]);
 
-  // 🔥 Update status
+  // 🔥 UPDATE STATUS (Improved)
   const updateStatus = async (id: number, status: string) => {
     try {
-      await fetch(`${BACKEND_URL}/api/kitchen/orders/${id}`, {
+      const res = await fetch(`${BACKEND_URL}/api/kitchen/orders/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -98,9 +114,16 @@ const Kitchen: React.FC = () => {
         },
         body: JSON.stringify({ status }),
       });
+
+      if (!res.ok) {
+        throw new Error("Update failed");
+      }
+
       fetchOrders();
+
     } catch (err) {
-      console.error("Update failed:", err);
+      console.error("❌ Update failed:", err);
+      alert("Failed to update order");
     }
   };
 
@@ -111,16 +134,17 @@ const Kitchen: React.FC = () => {
     <div style={{ padding: 20, fontFamily: "sans-serif" }}>
       <h1>🍳 Kitchen Dashboard</h1>
 
-      {/* 🔊 ENABLE SOUND (BROWSER REQUIREMENT) */}
+      {/* 🔊 ENABLE SOUND */}
       {!soundEnabled ? (
         <button
           onClick={() => {
-            // Playing then pausing immediately "unlocks" audio for this tab
-            audioRef.current.play().then(() => {
-              audioRef.current.pause();
-              audioRef.current.currentTime = 0;
-              setSoundEnabled(true);
-            }).catch(() => alert("Please click again to allow sound."));
+            audioRef.current.play()
+              .then(() => {
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
+                setSoundEnabled(true);
+              })
+              .catch(() => alert("Click again to enable sound"));
           }}
           style={{
             marginBottom: 20,
@@ -130,17 +154,18 @@ const Kitchen: React.FC = () => {
             fontWeight: "bold",
             borderRadius: 8,
             border: "none",
-            cursor: "pointer",
-            boxShadow: "0 4px 6px rgba(0,0,0,0.1)"
+            cursor: "pointer"
           }}
         >
           🔔 Enable Order Alerts
         </button>
       ) : (
-        <div style={{ color: "green", marginBottom: 20 }}>✅ Alerts Active</div>
+        <div style={{ color: "green", marginBottom: 20 }}>
+          ✅ Alerts Active
+        </div>
       )}
 
-      {/* Logout */}
+      {/* LOGOUT */}
       <button
         onClick={() => {
           localStorage.removeItem("kitchen_token");
@@ -162,8 +187,11 @@ const Kitchen: React.FC = () => {
 
       <hr />
 
-      {/* Active Orders */}
-      <h2 style={{ marginTop: 20 }}>🟡 Active Orders ({activeOrders.length})</h2>
+      {/* ACTIVE ORDERS */}
+      <h2 style={{ marginTop: 20 }}>
+        🟡 Active Orders ({activeOrders.length})
+      </h2>
+
       {activeOrders.length === 0 ? (
         <p>No active orders</p>
       ) : (
@@ -180,21 +208,23 @@ const Kitchen: React.FC = () => {
               }}
             >
               <h3>Order #{order.id}</h3>
+
               <ul style={{ paddingLeft: 20 }}>
                 {order.item_ordered.split(",").map((item: string, i: number) => (
                   <li key={i}>{item.trim()}</li>
                 ))}
               </ul>
+
               <p><strong>Status:</strong> {order.delivery_status}</p>
+
               <div style={{ display: "flex", gap: 10 }}>
                 <button
-                  style={{ cursor: 'pointer', padding: '5px 10px' }}
                   onClick={() => updateStatus(order.id, "preparing")}
                 >
                   🔵 Start
                 </button>
+
                 <button
-                  style={{ cursor: 'pointer', padding: '5px 10px' }}
                   onClick={() => updateStatus(order.id, "ready")}
                 >
                   🟢 Done
@@ -205,8 +235,9 @@ const Kitchen: React.FC = () => {
         </div>
       )}
 
-      {/* Completed Orders */}
+      {/* COMPLETED */}
       <h2 style={{ marginTop: 40 }}>✅ Recently Completed</h2>
+
       <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
         {completedOrders.map((order) => (
           <div
