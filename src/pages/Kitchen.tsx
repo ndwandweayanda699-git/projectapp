@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
@@ -7,10 +7,8 @@ const Kitchen: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [knownOrderIds, setKnownOrderIds] = useState<number[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const navigate = useNavigate();
-
   const token = localStorage.getItem("kitchen_token");
 
   // 🚨 Redirect if not logged in
@@ -20,22 +18,19 @@ const Kitchen: React.FC = () => {
     }
   }, [token, navigate]);
 
-  // 🔊 Load sound
-  useEffect(() => {
-    audioRef.current = new Audio(
+  // 🔊 ✅ FIXED PLAY SOUND (NEW INSTANCE EVERY TIME)
+  const playSound = () => {
+    if (!soundEnabled) return;
+
+    const sound = new Audio(
       "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
     );
-    audioRef.current.volume = 1;
-  }, []);
 
-  // 🔊 Play sound
-  const playSound = () => {
-    if (audioRef.current && soundEnabled) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch((err) => {
-        console.log("Sound failed:", err);
-      });
-    }
+    sound.volume = 1;
+
+    sound.play().catch((err) => {
+      console.log("Sound failed:", err);
+    });
   };
 
   // 🔥 Fetch orders
@@ -60,8 +55,7 @@ const Kitchen: React.FC = () => {
         (order: any) => !knownOrderIds.includes(order.id)
       );
 
-      // ✅ FIXED: ALWAYS play if new order
-      if (newOrders.length > 0) {
+      if (newOrders.length > 0 && knownOrderIds.length > 0) {
         console.log("🔔 NEW ORDER DETECTED");
         playSound();
       }
@@ -114,14 +108,8 @@ const Kitchen: React.FC = () => {
       {!soundEnabled && (
         <button
           onClick={() => {
-            if (audioRef.current) {
-              audioRef.current.play().then(() => {
-                audioRef.current?.pause();
-                audioRef.current.currentTime = 0;
-                setSoundEnabled(true);
-                alert("Sound Enabled ✅");
-              });
-            }
+            setSoundEnabled(true);
+            alert("Sound Enabled ✅");
           }}
           style={{
             marginBottom: 10,
