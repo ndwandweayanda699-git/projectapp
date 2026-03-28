@@ -6,7 +6,6 @@ import { useNavigate } from "react-router-dom";
 const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
 
 const App: React.FC = () => {
-
   const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
@@ -14,7 +13,6 @@ const App: React.FC = () => {
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
-
   const [deliveryType, setDeliveryType] = useState<"delivery" | "collection">("delivery");
 
   const filteredItems = MENU_ITEMS.filter((item) =>
@@ -30,19 +28,15 @@ const App: React.FC = () => {
   };
 
   const handlePlaceOrder = async () => {
-
     if (loading) return;
-
     if (cart.length === 0) {
       alert("Your cart is empty!");
       return;
     }
-
     if (deliveryType === "delivery" && !address.trim()) {
       alert("Please enter delivery address!");
       return;
     }
-
     if (!phone.trim()) {
       alert("Please enter phone number!");
       return;
@@ -50,15 +44,16 @@ const App: React.FC = () => {
 
     setLoading(true);
 
+    // Calculate total
     const totalAmount = cart.reduce((sum, item) => sum + item.price, 0);
-    const amountInCents = Math.round(totalAmount * 100);
 
+    // NOTE: Yoco Pay Links (slug-based) usually expect Rands in the URL.
+    // If your screenshot showed R8800 for amount=8800, we should send totalAmount (88).
     const orderRef = "Order-" + Date.now();
     const itemOrdered = cart.map((item) => item.name).join(", ");
 
     try {
-
-      console.log("🧾 Creating order...");
+      console.log("🧾 Creating order in database...");
 
       const response = await fetch(`${BACKEND_URL}/api/orders`, {
         method: "POST",
@@ -68,7 +63,7 @@ const App: React.FC = () => {
         body: JSON.stringify({
           user_id: 1,
           item_ordered: itemOrdered,
-          price: totalAmount,
+          price: totalAmount, // Saved as Rands in DB
           payment_method: "yoco",
           address: deliveryType === "delivery" ? address : "COLLECTION",
           phone: phone,
@@ -83,42 +78,39 @@ const App: React.FC = () => {
       const data = await response.json();
       const orderId = data?.order?.id;
 
-      console.log("✅ Order created:", orderId);
-
       if (!orderId) {
         alert("Order ID not returned");
         setLoading(false);
         return;
       }
 
+      console.log("✅ Order created:", orderId);
+
       const successUrl = `https://projectapp-sk4p.onrender.com/success?order_id=${orderId}`;
 
-      // 🔥 FINAL CORRECT YOCO URL
-      const paymentUrl =
-        `https://pay.yoco.com/sizakala` +
-        `?amount=${amountInCents}` +
-        `&reference=${orderRef}` +
-        `&metadata[order_id]=${orderId}` +   // ✅ FIXED
-        `&successUrl=${encodeURIComponent(successUrl)}` +
-        `&cancelUrl=${encodeURIComponent(successUrl)}`;
+      // 🔥 FIXED YOCO URL: Using totalAmount instead of cents to fix the R8800 error.
+      // Also ensuring proper URL encoding for success/cancel links.
+      const paymentUrl = new URL(`https://pay.yoco.com/sizakala`);
+      paymentUrl.searchParams.append("amount", totalAmount.toString());
+      paymentUrl.searchParams.append("reference", orderRef);
+      paymentUrl.searchParams.append("metadata[order_id]", orderId.toString());
+      paymentUrl.searchParams.append("successUrl", successUrl);
+      paymentUrl.searchParams.append("cancelUrl", successUrl);
 
-      console.log("➡️ Redirecting to Yoco:", paymentUrl);
+      console.log("➡️ Redirecting to Yoco:", paymentUrl.toString());
 
-      // OPTIONAL: clear cart before redirect
-      setCart([]);
-
-      window.location.href = paymentUrl;
+      setCart([]); // Clear cart
+      window.location.href = paymentUrl.toString();
 
     } catch (error) {
       console.error("❌ Order failed:", error);
-      alert("Order failed. Try again.");
+      alert("Order failed. Please try again.");
       setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-
       {/* HEADER */}
       <header className="py-16 px-4 text-center bg-white border-b shadow-sm mb-10 relative">
         <h1 className="text-4xl font-black">
@@ -141,7 +133,6 @@ const App: React.FC = () => {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 pb-20">
-
         {/* SEARCH */}
         <div className="flex justify-center mb-10">
           <Input
@@ -161,11 +152,11 @@ const App: React.FC = () => {
                 className="w-full h-48 object-cover rounded-lg"
               />
               <h3 className="text-xl font-bold mt-3">{item.name}</h3>
-              <p>R{item.price}</p>
+              <p className="text-blue-600 font-semibold">R{item.price}</p>
 
               <button
                 onClick={() => addToCart(item)}
-                className="mt-3 w-full bg-blue-600 text-white p-3 rounded"
+                className="mt-3 w-full bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Add to Cart
               </button>
@@ -174,34 +165,46 @@ const App: React.FC = () => {
         </div>
 
         {/* CART */}
-        <div className="mt-16 bg-white p-6 rounded-xl shadow max-w-2xl mx-auto">
+        <div className="mt-16 bg-white p-6 rounded-xl shadow-lg max-w-2xl mx-auto border">
+          <h2 className="text-2xl font-bold mb-6">Your Cart</h2>
 
-          <h2 className="text-xl font-bold mb-4">Cart</h2>
+          {cart.length === 0 ? (
+            <p className="text-gray-500 italic">Your cart is empty.</p>
+          ) : (
+            cart.map((item, index) => (
+              <div key={index} className="flex justify-between items-center mb-3 border-b pb-2">
+                <span>{item.name} - R{item.price}</span>
+                <button
+                  onClick={() => removeFromCart(index)}
+                  className="text-red-500 text-sm hover:underline"
+                >
+                  Remove
+                </button>
+              </div>
+            ))
+          )}
 
-          {cart.map((item, index) => (
-            <div key={index} className="flex justify-between mb-2">
-              <span>{item.name}</span>
-              <button onClick={() => removeFromCart(index)}>Remove</button>
-            </div>
-          ))}
-
-          <p className="mt-4 font-bold">
-            Total: R{cart.reduce((t, i) => t + i.price, 0)}
-          </p>
+          <div className="mt-6 pt-4 border-t">
+            <p className="text-xl font-bold">
+              Total: R{cart.reduce((t, i) => t + i.price, 0)}
+            </p>
+          </div>
 
           {/* DELIVERY TYPE */}
-          <div className="mt-4">
-            <label>
+          <div className="mt-6 flex gap-6 p-4 bg-slate-50 rounded-lg">
+            <label className="flex items-center cursor-pointer">
               <input
                 type="radio"
+                className="mr-2"
                 checked={deliveryType === "delivery"}
                 onChange={() => setDeliveryType("delivery")}
               /> Delivery
             </label>
 
-            <label className="ml-4">
+            <label className="flex items-center cursor-pointer">
               <input
                 type="radio"
+                className="mr-2"
                 checked={deliveryType === "collection"}
                 onChange={() => setDeliveryType("collection")}
               /> Collection
@@ -212,32 +215,32 @@ const App: React.FC = () => {
           {deliveryType === "delivery" && (
             <input
               type="text"
-              placeholder="Delivery address"
+              placeholder="Full Delivery Address"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              className="w-full mt-4 p-3 border rounded"
+              className="w-full mt-4 p-4 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
             />
           )}
 
           {/* PHONE */}
           <input
             type="text"
-            placeholder="Phone number"
+            placeholder="Phone Number"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="w-full mt-4 p-3 border rounded"
+            className="w-full mt-4 p-4 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
           />
 
           <button
             onClick={handlePlaceOrder}
             disabled={loading}
-            className="mt-4 w-full bg-green-600 text-white p-4 rounded"
+            className={`mt-8 w-full p-4 rounded-lg text-white font-bold text-lg transition-all ${
+              loading ? "bg-gray-400" : "bg-green-600 hover:bg-green-700 shadow-md"
+            }`}
           >
-            {loading ? "Processing..." : "Pay & Order"}
+            {loading ? "Processing..." : "Pay & Order Now"}
           </button>
-
         </div>
-
       </main>
     </div>
   );
