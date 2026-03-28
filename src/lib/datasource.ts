@@ -1,34 +1,33 @@
-
-  export const MENU_ITEMS = [
+export const MENU_ITEMS = [
   {
     id: 1,
     name: "Burger",
     price: 85,
-    image: "/burger.jpg"
+    image: "/images/burger.jpg"
   },
   {
     id: 2,
     name: "Pizza",
     price: 120,
-    image: "/pizza.jpg"
+    image: "/images/pizza.jpg"
   },
   {
     id: 3,
     name: "Chips",
     price: 0.5,
-    image: "/chips.jpg"
+    image: "/images/chips.jpg"
   },
   {
     id: 4,
     name: "Dessert",
     price: 3,
-    image: "/dessert.jpg"
+    image: "/images/dessert.jpg"
   },
   {
     id: 5,
     name: "Coffee",
     price: 35,
-    image: "/coffee.jpg"
+    image: "/images/coffee.jpg"
   }
 ];
 
