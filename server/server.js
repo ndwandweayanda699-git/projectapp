@@ -15,7 +15,6 @@ const app = express();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const KITCHEN_PASSWORD = process.env.KITCHEN_PASSWORD || "kitchen123";
 const JWT_SECRET = process.env.JWT_SECRET;
-
 const YOCO_WEBHOOK_SECRET = process.env.YOCO_WEBHOOK_SECRET;
 
 if (!YOCO_WEBHOOK_SECRET) {
@@ -37,6 +36,11 @@ app.use((req, res, next) => {
   console.log(`➡️ ${req.method} ${req.url}`);
   next();
 });
+
+// ==============================
+// 🖼️ SERVE IMAGES (🔥 IMPORTANT FIX)
+// ==============================
+app.use('/images', express.static(path.join(__dirname, '../public/images')));
 
 // ==============================
 // 🗄️ DATABASE
@@ -101,10 +105,8 @@ app.post("/api/kitchen/login", (req, res) => {
 });
 
 // ==============================
-// 🍔 MENU (NEW 🔥)
+// 🍔 MENU
 // ==============================
-
-// GET ALL MENU (for customers - only available)
 app.get('/api/menu', async (req, res) => {
   try {
     const result = await pool.query(
@@ -117,7 +119,6 @@ app.get('/api/menu', async (req, res) => {
   }
 });
 
-// GET ALL MENU (for admin - includes unavailable)
 app.get('/api/admin/menu', verifyAdmin, async (req, res) => {
   try {
     const result = await pool.query(
@@ -130,7 +131,6 @@ app.get('/api/admin/menu', verifyAdmin, async (req, res) => {
   }
 });
 
-// TOGGLE AVAILABILITY
 app.put('/api/admin/menu/:id/toggle', verifyAdmin, async (req, res) => {
   const { id } = req.params;
 
@@ -147,14 +147,13 @@ app.put('/api/admin/menu/:id/toggle', verifyAdmin, async (req, res) => {
   }
 });
 
-// ADD MENU ITEM (optional but powerful)
 app.post('/api/admin/menu', verifyAdmin, async (req, res) => {
-  const { name, price } = req.body;
+  const { name, price, image } = req.body;
 
   try {
     const result = await pool.query(
-      "INSERT INTO menu_items (name, price) VALUES ($1, $2) RETURNING *",
-      [name, price]
+      "INSERT INTO menu_items (name, price, image) VALUES ($1, $2, $3) RETURNING *",
+      [name, price, image]
     );
 
     res.json(result.rows[0]);
