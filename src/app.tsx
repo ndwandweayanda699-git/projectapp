@@ -147,10 +147,17 @@ const App: React.FC = () => {
           />
         </div>
 
-        {/* MENU */}
+        {/* ✅ MENU WITH IMAGES */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredItems.map((item) => (
             <div key={item.id} className="bg-white p-4 rounded-xl shadow">
+
+              {/* 🔥 IMAGE ADDED HERE */}
+              <img
+                src={item.image}
+                alt={item.name}
+                className="w-full h-40 object-cover rounded-lg"
+              />
 
               <h3 className="text-xl font-bold mt-3">{item.name}</h3>
               <p className="text-blue-600 font-semibold">R{item.price}</p>

@@ -28,9 +28,7 @@ if (!YOCO_WEBHOOK_SECRET) {
 app.use('/webhook/yoco', express.raw({ type: '*/*' }));
 app.use(express.json());
 
-app.use(cors({
-  origin: "*",
-}));
+app.use(cors({ origin: "*" }));
 
 app.use((req, res, next) => {
   console.log(`➡️ ${req.method} ${req.url}`);
@@ -38,9 +36,9 @@ app.use((req, res, next) => {
 });
 
 // ==============================
-// 🖼️ SERVE IMAGES (🔥 IMPORTANT FIX)
+// 🖼️ SERVE IMAGES (✅ FIXED)
 // ==============================
-app.use('/images', express.static(path.join(__dirname, '../public/images')));
+app.use('/images', express.static(path.join(process.cwd(), 'public/images')));
 
 // ==============================
 // 🗄️ DATABASE
@@ -126,23 +124,18 @@ app.get('/api/admin/menu', verifyAdmin, async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error("Admin menu error:", err);
     res.status(500).json({ error: "Failed to fetch menu" });
   }
 });
 
 app.put('/api/admin/menu/:id/toggle', verifyAdmin, async (req, res) => {
-  const { id } = req.params;
-
   try {
     await pool.query(
       "UPDATE menu_items SET is_available = NOT is_available WHERE id = $1",
-      [id]
+      [req.params.id]
     );
-
     res.json({ success: true });
-  } catch (err) {
-    console.error("Toggle error:", err);
+  } catch {
     res.status(500).json({ error: "Toggle failed" });
   }
 });
@@ -155,10 +148,8 @@ app.post('/api/admin/menu', verifyAdmin, async (req, res) => {
       "INSERT INTO menu_items (name, price, image) VALUES ($1, $2, $3) RETURNING *",
       [name, price, image]
     );
-
     res.json(result.rows[0]);
-  } catch (err) {
-    console.error("Add item error:", err);
+  } catch {
     res.status(500).json({ error: "Add failed" });
   }
 });
@@ -184,8 +175,7 @@ app.post('/api/orders', async (req, res) => {
 
     res.json({ order: result.rows[0] });
 
-  } catch (err) {
-    console.error("Create error:", err);
+  } catch {
     res.status(500).json({ error: "Create failed" });
   }
 });
@@ -212,17 +202,14 @@ app.post('/webhook/yoco', async (req, res) => {
       const orderId = event.data?.metadata?.order_id;
 
       await pool.query(
-        `UPDATE orders
-         SET payment_status='paid'
-         WHERE id=$1 AND payment_status!='paid'`,
+        `UPDATE orders SET payment_status='paid' WHERE id=$1`,
         [orderId]
       );
     }
 
     res.sendStatus(200);
 
-  } catch (err) {
-    console.error("Webhook error:", err);
+  } catch {
     res.sendStatus(500);
   }
 });
@@ -237,32 +224,6 @@ app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
      AND delivery_status != 'ready'
      ORDER BY id ASC`
   );
-
-  res.json(result.rows);
-});
-
-app.put('/api/kitchen/orders/:id', verifyKitchen, async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body;
-
-  await pool.query(
-    `UPDATE orders SET delivery_status=$1 WHERE id=$2`,
-    [status, id]
-  );
-
-  res.json({ success: true });
-});
-
-// ==============================
-// 👨‍💼 ADMIN ORDERS
-// ==============================
-app.get('/api/orders', verifyAdmin, async (req, res) => {
-  const result = await pool.query(
-    `SELECT * FROM orders
-     WHERE payment_status='paid'
-     ORDER BY id DESC`
-  );
-
   res.json(result.rows);
 });
 
