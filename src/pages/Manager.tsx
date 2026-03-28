@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useCallback } from "react";
 
-// ✅ Backend URL
 const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
 
 const Manager: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
+  const [menu, setMenu] = useState<any[]>([]);
   const [password, setPassword] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -14,14 +14,42 @@ const Manager: React.FC = () => {
     "Authorization": `Bearer ${localStorage.getItem("token")}`
   });
 
-  // 🚪 LOGOUT
+  // ==============================
+  // 🔐 LOGIN / LOGOUT
+  // ==============================
   const handleLogout = () => {
     localStorage.removeItem("token");
     setLoggedIn(false);
     setOrders([]);
+    setMenu([]);
   };
 
+  const handleLogin = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        localStorage.setItem("token", data.token);
+        setLoggedIn(true);
+        fetchOrders();
+        fetchMenu();
+      } else {
+        alert(data.error || "Wrong password");
+      }
+    } catch {
+      alert("Server error");
+    }
+  };
+
+  // ==============================
   // 📥 FETCH ORDERS
+  // ==============================
   const fetchOrders = useCallback(async () => {
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -34,99 +62,92 @@ const Manager: React.FC = () => {
       });
 
       const data = await res.json();
-
-      if (Array.isArray(data)) {
-        setOrders(data);
-      } else if (data && Array.isArray(data.orders)) {
-        setOrders(data.orders);
-      } else {
-        setOrders([]);
-      }
+      setOrders(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error("Error fetching orders", err);
+      console.error(err);
     } finally {
       setIsRefreshing(false);
     }
   }, []);
 
-  // 🔑 LOGIN
-  const handleLogin = async () => {
+  // ==============================
+  // 🍔 FETCH MENU (NEW 🔥)
+  // ==============================
+  const fetchMenu = async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ password })
+      const res = await fetch(`${BACKEND_URL}/api/admin/menu`, {
+        headers: getHeaders()
       });
 
       const data = await res.json();
-
-      if (res.ok) {
-        localStorage.setItem("token", data.token);
-        setLoggedIn(true);
-        fetchOrders();
-      } else {
-        alert(data.error || "Wrong password");
-      }
+      setMenu(data);
     } catch (err) {
-      alert("Could not connect to server.");
+      console.error("Menu fetch error", err);
     }
   };
 
-  // 🔄 AUTO REFRESH
+  // ==============================
+  // 🔄 TOGGLE MENU ITEM
+  // ==============================
+  const toggleItem = async (id: number) => {
+    try {
+      await fetch(`${BACKEND_URL}/api/admin/menu/${id}/toggle`, {
+        method: "PUT",
+        headers: getHeaders()
+      });
+
+      fetchMenu(); // refresh
+    } catch (err) {
+      alert("Toggle failed");
+    }
+  };
+
+  // ==============================
+  // 🚚 UPDATE DELIVERY
+  // ==============================
+  const updateDelivery = async (orderId: number, status: string) => {
+    await fetch(`${BACKEND_URL}/api/kitchen/orders/${orderId}`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify({ status })
+    });
+    fetchOrders();
+  };
+
+  // ==============================
+  // 💰 REVENUE
+  // ==============================
+  const totalPaidRevenue = orders
+    .filter(o => o.payment_status === "paid")
+    .reduce((sum, o) => sum + parseFloat(o.price || 0), 0);
+
+  // ==============================
+  // 🔄 AUTO LOAD
+  // ==============================
   useEffect(() => {
     const token = localStorage.getItem("token");
 
     if (token) {
       setLoggedIn(true);
       fetchOrders();
+      fetchMenu();
     }
 
     let interval: any;
 
-    if (loggedIn || token) {
-      interval = setInterval(fetchOrders, 5000);
+    if (token) {
+      interval = setInterval(() => {
+        fetchOrders();
+        fetchMenu();
+      }, 5000);
     }
 
     return () => clearInterval(interval);
-  }, [loggedIn, fetchOrders]);
+  }, [fetchOrders]);
 
-  // 🚚 UPDATE DELIVERY
-  const updateDelivery = async (orderId: number, status: string) => {
-    await fetch(`${BACKEND_URL}/api/update-delivery`, {
-      method: "POST",
-      headers: getHeaders(),
-      body: JSON.stringify({ order_id: orderId, status })
-    });
-    fetchOrders();
-  };
-
-  // ❌ DELETE
-  const deleteOrder = async (orderId: number) => {
-    if (!window.confirm("Delete permanently?")) return;
-
-    setOrders(prev => prev.filter(order => order.id !== orderId));
-
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
-        method: "DELETE",
-        headers: getHeaders()
-      });
-
-      if (!res.ok) throw new Error();
-    } catch {
-      alert("Delete failed. Refreshing...");
-      fetchOrders();
-    }
-  };
-
-  // 💰 REVENUE
-  const totalPaidRevenue = orders
-    .filter(order => order.payment_status === "paid")
-    .reduce((sum, order) => sum + parseFloat(order.price || 0), 0);
-
+  // ==============================
   // 🔒 LOGIN SCREEN
+  // ==============================
   if (!loggedIn) {
     return (
       <div style={{ textAlign: "center", marginTop: 100 }}>
@@ -138,144 +159,89 @@ const Manager: React.FC = () => {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-          style={{
-            padding: 12,
-            width: 250,
-            borderRadius: 6,
-            border: "1px solid #ccc"
-          }}
+          style={{ padding: 12, width: 250 }}
         />
 
         <br />
 
-        <button
-          onClick={handleLogin}
-          style={{
-            marginTop: 20,
-            padding: "10px 25px",
-            background: "#007bff",
-            color: "white",
-            border: "none",
-            borderRadius: 6
-          }}
-        >
+        <button onClick={handleLogin} style={{ marginTop: 20 }}>
           Login
         </button>
       </div>
     );
   }
 
-  // 📊 DASHBOARD (PROFESSIONAL UI)
+  // ==============================
+  // 📊 DASHBOARD
+  // ==============================
   return (
-    <div style={{
-      padding: "30px",
-      maxWidth: "900px",
-      margin: "0 auto",
-      fontFamily: "Arial",
-      background: "#f4f6f9",
-      minHeight: "100vh"
-    }}>
+    <div style={{ padding: 30, maxWidth: 900, margin: "0 auto" }}>
 
-      {/* HEADER */}
+      <h1>📊 Manager Dashboard</h1>
+
+      <button onClick={handleLogout}>Logout</button>
+
+      {/* 💰 REVENUE */}
       <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: "30px"
-      }}>
-        <h1>📊 Manager Dashboard</h1>
-
-        <button
-          onClick={handleLogout}
-          style={{
-            padding: "8px 15px",
-            background: "#6c757d",
-            color: "white",
-            border: "none",
-            borderRadius: 6
-          }}
-        >
-          Logout
-        </button>
-      </div>
-
-      {/* REVENUE CARD */}
-      <div style={{
-        background: "#28a745",
+        background: "green",
         color: "white",
-        padding: "20px",
-        borderRadius: 12,
-        marginBottom: 30
+        padding: 20,
+        borderRadius: 10,
+        marginTop: 20
       }}>
-        <p>Total Paid Revenue</p>
-        <h2>R{totalPaidRevenue.toFixed(2)}</h2>
+        <h2>Revenue: R{totalPaidRevenue.toFixed(2)}</h2>
       </div>
 
-      {/* ORDERS */}
-      {orders.length > 0 ? (
-        orders.map(order => (
-          <div key={order.id} style={{
-            background: "white",
-            padding: 20,
-            borderRadius: 12,
-            marginBottom: 15,
-            boxShadow: "0 2px 6px rgba(0,0,0,0.05)"
-          }}>
+      {/* 🍔 MENU CONTROL (NEW 🔥) */}
+      <h2 style={{ marginTop: 30 }}>🍔 Menu Control</h2>
 
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between"
-            }}>
-              <strong>Order #{order.id}</strong>
-
-              <span style={{
-                padding: "5px 10px",
-                borderRadius: 20,
-                background: order.payment_status === "paid" ? "#d4edda" : "#f8d7da",
-                color: order.payment_status === "paid" ? "#155724" : "#721c24"
-              }}>
-                {order.payment_status}
-              </span>
-            </div>
-
-            <p><b>Items:</b> {order.item_ordered}</p>
-            <p><b>Price:</b> R{order.price}</p>
-            <p><b>Status:</b> {order.delivery_status}</p>
-
-            <div style={{ marginTop: 10 }}>
-              <button
-                onClick={() => updateDelivery(order.id, "delivered")}
-                style={{
-                  marginRight: 10,
-                  padding: "8px 12px",
-                  background: "#007bff",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 6
-                }}
-              >
-                Deliver
-              </button>
-
-              <button
-                onClick={() => deleteOrder(order.id)}
-                style={{
-                  padding: "8px 12px",
-                  background: "#dc3545",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 6
-                }}
-              >
-                Delete
-              </button>
-            </div>
-
+      {menu.map(item => (
+        <div key={item.id} style={{
+          background: "white",
+          padding: 15,
+          marginBottom: 10,
+          borderRadius: 8,
+          display: "flex",
+          justifyContent: "space-between"
+        }}>
+          <div>
+            <strong>{item.name}</strong> - R{item.price}
           </div>
-        ))
-      ) : (
-        <p style={{ textAlign: "center" }}>No orders</p>
-      )}
+
+          <button
+            onClick={() => toggleItem(item.id)}
+            style={{
+              background: item.is_available ? "green" : "red",
+              color: "white",
+              padding: "6px 12px",
+              borderRadius: 6
+            }}
+          >
+            {item.is_available ? "Available" : "Out of Stock"}
+          </button>
+        </div>
+      ))}
+
+      {/* 📦 ORDERS */}
+      <h2 style={{ marginTop: 30 }}>Orders</h2>
+
+      {orders.map(order => (
+        <div key={order.id} style={{
+          background: "white",
+          padding: 15,
+          marginBottom: 10,
+          borderRadius: 8
+        }}>
+          <strong>Order #{order.id}</strong>
+          <p>{order.item_ordered}</p>
+          <p>R{order.price}</p>
+
+          <button onClick={() => updateDelivery(order.id, "delivered")}>
+            Mark Delivered
+          </button>
+        </div>
+      ))}
+
     </div>
   );
 };
