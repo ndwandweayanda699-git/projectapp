@@ -1,261 +1,268 @@
-require('dotenv').config();
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 
-const express = require('express');
-const cors = require('cors');
-const { Pool } = require('pg');
-const jwt = require("jsonwebtoken");
-const path = require('path');
-const crypto = require("crypto");
+const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
 
-const app = express();
+const Kitchen: React.FC = () => {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [soundEnabled, setSoundEnabled] = useState(false);
 
-// ==============================
-// 🔐 CONFIG
-// ==============================
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-const KITCHEN_PASSWORD = process.env.KITCHEN_PASSWORD || "kitchen123";
-const JWT_SECRET = process.env.JWT_SECRET;
-const YOCO_WEBHOOK_SECRET = process.env.YOCO_WEBHOOK_SECRET;
+  const audioRef = useRef<HTMLAudioElement>(
+    new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg")
+  );
 
-// 🚨 FAIL FAST IF MISSING
-if (!YOCO_WEBHOOK_SECRET) {
-  console.error("❌ Missing YOCO_WEBHOOK_SECRET");
-  process.exit(1);
-}
+  // ✅ Use Set for robust new order detection
+  const prevOrderIdsRef = useRef<Set<number>>(new Set());
 
-// ==============================
-// 🚨 MIDDLEWARE
-// ==============================
+  const navigate = useNavigate();
+  const token = localStorage.getItem("kitchen_token");
 
-// 🔥 RAW BODY FOR WEBHOOK (Must stay above express.json)
-app.use('/webhook/yoco', express.raw({ type: '*/*' }));
-
-app.use(express.json());
-
-app.use(cors({
-  origin: "*",
-}));
-
-// 🔍 DEBUG LOGS
-app.use((req, res, next) => {
-  console.log(`➡️ ${req.method} ${req.url}`);
-  next();
-});
-
-// ==============================
-// 🗄️ DATABASE
-// ==============================
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
-
-// ==============================
-// 🔐 AUTH MIDDLEWARE
-// ==============================
-
-const verifyAdmin = (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "No token" });
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.role !== "admin") {
-      return res.status(403).json({ error: "Not admin" });
+  // 🚨 Redirect if not logged in
+  useEffect(() => {
+    if (!token) {
+      navigate("/kitchen-login");
     }
-    next();
-  } catch {
-    res.status(403).json({ error: "Invalid token" });
-  }
-};
+  }, [token, navigate]);
 
-const verifyKitchen = (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "No token" });
+  // 🔊 Configure audio
+  useEffect(() => {
+    audioRef.current.volume = 1;
+    audioRef.current.preload = "auto";
+  }, []);
 
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.role !== "kitchen") {
-      return res.status(403).json({ error: "Not kitchen" });
-    }
-    next();
-  } catch {
-    res.status(403).json({ error: "Invalid token" });
-  }
-};
+  // 🔊 PLAY SOUND
+  const playSound = useCallback(() => {
+    if (!soundEnabled) return;
 
-// ==============================
-// 🔐 LOGIN ROUTES
-// ==============================
+    try {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      const playPromise = audioRef.current.play();
 
-app.post("/api/admin/login", (req, res) => {
-  if (req.body.password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: "Wrong password" });
-  }
-
-  const token = jwt.sign({ role: "admin" }, JWT_SECRET, { expiresIn: "4h" });
-  res.json({ token });
-});
-
-app.post("/api/kitchen/login", (req, res) => {
-  if (req.body.password !== KITCHEN_PASSWORD) {
-    return res.status(401).json({ error: "Wrong password" });
-  }
-
-  const token = jwt.sign({ role: "kitchen" }, JWT_SECRET, { expiresIn: "8h" });
-  res.json({ token });
-});
-
-// ==============================
-// 🟢 CREATE ORDER (UNPAID)
-// ==============================
-
-app.post('/api/orders', async (req, res) => {
-  const { user_id, item_ordered, price, payment_method } = req.body;
-
-  if (!user_id || !item_ordered || !price) {
-    return res.status(400).json({ error: "Missing fields" });
-  }
-
-  try {
-    const result = await pool.query(
-      `INSERT INTO orders
-      (user_id, item_ordered, price, payment_method, payment_status, delivery_status, created_at)
-      VALUES ($1,$2,$3,$4,'pending','pending',NOW())
-      RETURNING *`,
-      [user_id, item_ordered, price, payment_method]
-    );
-
-    console.log("🧾 Order created (Pending Payment):", result.rows[0].id);
-    res.json({ order: result.rows[0] });
-
-  } catch (err) {
-    console.error("Create error:", err);
-    res.status(500).json({ error: "Create failed" });
-  }
-});
-
-// ==============================
-// 💳 YOCO WEBHOOK
-// ==============================
-
-app.post('/webhook/yoco', async (req, res) => {
-  try {
-    const signature = req.headers['yoco-signature'];
-    if (!signature) return res.sendStatus(400);
-
-    // ✅ VERIFY SIGNATURE
-    const expectedSignature = crypto
-      .createHmac('sha256', YOCO_WEBHOOK_SECRET)
-      .update(req.body)
-      .digest('hex');
-
-    if (signature !== expectedSignature) {
-      console.log("❌ Invalid Webhook Signature");
-      return res.sendStatus(400);
-    }
-
-    const event = JSON.parse(req.body.toString());
-
-    // ==============================
-    // ✅ PAYMENT SUCCESS
-    // ==============================
-    if (event.type === "payment.succeeded") {
-      const orderId = event.data?.metadata?.order_id;
-
-      if (orderId) {
-        await pool.query(
-          `UPDATE orders
-           SET payment_status='paid'
-           WHERE id=$1 AND payment_status!='paid'`,
-          [orderId]
-        );
-        console.log(`✅ Order ${orderId} marked PAID via Webhook`);
+      if (playPromise !== undefined) {
+        playPromise.catch(() => console.warn("🔇 Browser blocked sound"));
       }
+    } catch (err) {
+      console.error("Sound error:", err);
     }
+  }, [soundEnabled]);
 
-    res.sendStatus(200);
+  // 🔥 FETCH ORDERS
+  const fetchOrders = useCallback(async () => {
+    if (!token) return;
 
-  } catch (err) {
-    console.error("🔥 Webhook error:", err);
-    res.sendStatus(500);
-  }
-});
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/kitchen/orders`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-// ==============================
-// 🍳 KITCHEN (ONLY PAID & ACTIVE)
-// ==============================
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("kitchen_token");
+        navigate("/kitchen-login");
+        return;
+      }
 
-app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
-  try {
-    // Only show paid orders that aren't "ready" yet
-    const result = await pool.query(
-      `SELECT * FROM orders
-       WHERE payment_status='paid'
-       AND delivery_status != 'ready'
-       ORDER BY id ASC`
-    );
+      const data = await res.json();
+      const prevIds = prevOrderIdsRef.current;
+      const currentIds = new Set(data.map((o: any) => o.id));
 
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Kitchen fetch error:", err);
-    res.status(500).json({ error: "Kitchen fetch failed" });
-  }
-});
+      // ✅ Detect new orders accurately
+      let hasNewOrder = false;
+      currentIds.forEach((id) => {
+        if (!prevIds.has(id)) {
+          hasNewOrder = true;
+        }
+      });
 
-// Update status route for kitchen Start/Done buttons
-app.put('/api/kitchen/orders/:id', verifyKitchen, async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body; // 'preparing' or 'ready'
+      // 🔔 Only play if NOT first load and new order found
+      if (hasNewOrder && prevIds.size > 0) {
+        console.log("🔔 NEW ORDER RECEIVED");
+        playSound();
+      }
 
-  try {
-    await pool.query(
-      `UPDATE orders SET delivery_status=$1 WHERE id=$2`,
-      [status, id]
-    );
-    res.json({ success: true });
-  } catch (err) {
-    console.error("Update error:", err);
-    res.status(500).json({ error: "Update failed" });
-  }
-});
+      prevOrderIdsRef.current = currentIds;
+      setOrders(data);
 
-// ==============================
-// 👨‍💼 ADMIN (ONLY PAID HISTORY)
-// ==============================
+    } catch (err) {
+      console.error("Fetch error:", err);
+    }
+  }, [token, navigate, playSound]);
 
-app.get('/api/orders', verifyAdmin, async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT * FROM orders
-       WHERE payment_status='paid'
-       ORDER BY id DESC`
-    );
+  // 🔁 AUTO REFRESH (3 Seconds)
+  useEffect(() => {
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 3000);
+    return () => clearInterval(interval);
+  }, [fetchOrders]);
 
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Admin fetch error:", err);
-    res.status(500).json({ error: "Fetch failed" });
-  }
-});
+  // 🔥 UPDATE STATUS
+  const updateStatus = async (id: number, status: string) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/kitchen/orders/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status }),
+      });
 
-// ==============================
-// 📦 FRONTEND
-// ==============================
+      if (!res.ok) throw new Error("Update failed");
+      fetchOrders(); // Refresh immediately
 
-app.use(express.static(path.join(__dirname, 'dist')));
+    } catch (err) {
+      console.error("❌ Update failed:", err);
+      alert("Failed to update order");
+    }
+  };
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
+  // ✅ Since backend only sends 'paid' orders, we just filter by delivery status
+  const activeOrders = orders.filter((o) => o.delivery_status !== "ready");
+  const completedOrders = orders.filter((o) => o.delivery_status === "ready");
 
-// ==============================
-// 🚀 START SERVER
-// ==============================
+  return (
+    <div style={{ padding: 20, fontFamily: "sans-serif", backgroundColor: '#f4f4f9', minHeight: '100vh' }}>
+      <h1 style={{ borderBottom: '2px solid #333', paddingBottom: '10px' }}>🍳 Kitchen Dashboard</h1>
 
-const PORT = process.env.PORT || 5000;
+      {/* 🔊 ENABLE SOUND */}
+      {!soundEnabled ? (
+        <button
+          onClick={() => {
+            audioRef.current.play()
+              .then(() => {
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
+                setSoundEnabled(true);
+              })
+              .catch(() => alert("Click again to enable sound"));
+          }}
+          style={{
+            marginBottom: 20,
+            padding: "12px 20px",
+            background: "#ff9800",
+            color: "white",
+            fontWeight: "bold",
+            borderRadius: 8,
+            border: "none",
+            cursor: "pointer",
+            boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+          }}
+        >
+          🔔 Enable Order Alerts
+        </button>
+      ) : (
+        <div style={{ color: "green", fontWeight: 'bold', marginBottom: 20 }}>
+          ✅ Audio Alerts Active
+        </div>
+      )}
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+      {/* LOGOUT */}
+      <button
+        onClick={() => {
+          localStorage.removeItem("kitchen_token");
+          navigate("/kitchen-login");
+        }}
+        style={{
+          position: "absolute",
+          top: 20,
+          right: 20,
+          padding: "8px 12px",
+          background: "#333",
+          color: "white",
+          borderRadius: 5,
+          cursor: "pointer"
+        }}
+      >
+        Logout
+      </button>
 
+      {/* ACTIVE ORDERS */}
+      <h2 style={{ marginTop: 20, color: '#d97706' }}>
+        🟡 Active Paid Orders ({activeOrders.length})
+      </h2>
+
+      {activeOrders.length === 0 ? (
+        <p style={{ fontStyle: 'italic', color: '#666' }}>Waiting for new paid orders...</p>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
+          {activeOrders.map((order) => (
+            <div
+              key={order.id}
+              style={{
+                border: "2px solid #333",
+                padding: 20,
+                width: 280,
+                borderRadius: 12,
+                backgroundColor: "#fff",
+                boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ margin: 0 }}>Order #{order.id}</h3>
+                <span style={{ fontSize: '12px', background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>PAID</span>
+              </div>
+
+              <ul style={{ paddingLeft: 20, margin: '15px 0', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+                {order.item_ordered.split(",").map((item: string, i: number) => (
+                  <li key={i} style={{ marginBottom: '5px' }}>{item.trim()}</li>
+                ))}
+              </ul>
+
+              <p style={{ fontSize: '14px' }}>
+                <strong>Status:</strong>
+                <span style={{ color: order.delivery_status === 'preparing' ? '#2563eb' : '#666', marginLeft: '5px', textTransform: 'capitalize' }}>
+                  {order.delivery_status}
+                </span>
+              </p>
+
+              <div style={{ display: "flex", gap: 10, marginTop: '15px' }}>
+                <button
+                  onClick={() => updateStatus(order.id, "preparing")}
+                  style={{ flex: 1, padding: '8px', cursor: 'pointer', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '5px' }}
+                >
+                  Start
+                </button>
+
+                <button
+                  onClick={() => updateStatus(order.id, "ready")}
+                  style={{ flex: 1, padding: '8px', cursor: 'pointer', background: '#10b981', color: 'white', border: 'none', borderRadius: '5px' }}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* COMPLETED */}
+      {completedOrders.length > 0 && (
+        <>
+          <h2 style={{ marginTop: 40, color: '#059669' }}>✅ Recently Completed</h2>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
+            {completedOrders.map((order) => (
+              <div
+                key={order.id}
+                style={{
+                  border: "1px solid #ccc",
+                  padding: 15,
+                  width: 260,
+                  borderRadius: 10,
+                  background: "#f0fdf4",
+                  opacity: 0.9
+                }}
+              >
+                <h3 style={{ margin: 0 }}>Order #{order.id}</h3>
+                <p style={{ color: "green", fontWeight: 'bold', margin: '10px 0 0 0' }}>✅ Ready for Pickup</p>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default Kitchen;
