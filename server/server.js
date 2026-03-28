@@ -56,7 +56,8 @@ const pool = new Pool({
 // ==============================
 
 const verifyAdmin = (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(" ")[1];
   if (!token) return res.status(401).json({ error: "No token" });
 
   try {
@@ -71,7 +72,8 @@ const verifyAdmin = (req, res, next) => {
 };
 
 const verifyKitchen = (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(" ")[1];
   if (!token) return res.status(401).json({ error: "No token" });
 
   try {
@@ -210,13 +212,30 @@ app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
     const result = await pool.query(
       `SELECT * FROM orders
        WHERE payment_status='paid'
-       ORDER BY id DESC`
+       AND delivery_status != 'ready'
+       ORDER BY id ASC` // Show oldest orders first
     );
 
     res.json(result.rows);
   } catch (err) {
     console.error("Kitchen error:", err);
     res.status(500).json({ error: "Kitchen fetch failed" });
+  }
+});
+
+// ✅ ADDED: Update order status route
+app.put('/api/kitchen/orders/:id', verifyKitchen, async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  try {
+    await pool.query(
+      `UPDATE orders SET delivery_status=$1 WHERE id=$2`,
+      [status, id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Update error:", err);
+    res.status(500).json({ error: "Update failed" });
   }
 });
 
