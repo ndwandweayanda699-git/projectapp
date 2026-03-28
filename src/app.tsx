@@ -15,7 +15,7 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [deliveryType, setDeliveryType] = useState<"delivery" | "collection">("delivery");
 
-  // ✅ FETCH MENU FROM BACKEND
+  // ✅ FETCH MENU
   const fetchMenu = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/menu`);
@@ -30,7 +30,7 @@ const App: React.FC = () => {
     fetchMenu();
   }, []);
 
-  // ✅ SEARCH FILTER
+  // ✅ SEARCH
   const filteredItems = menu.filter((item) =>
     item.name.toLowerCase().includes(search.toLowerCase())
   );
@@ -63,7 +63,9 @@ const App: React.FC = () => {
 
     setLoading(true);
 
-    const totalAmount = cart.reduce((sum, item) => sum + item.price, 0);
+    // ✅ FIXED TOTAL
+    const totalAmount = cart.reduce((sum, item) => sum + Number(item.price), 0);
+
     const orderRef = "Order-" + Date.now();
     const itemOrdered = cart.map((item) => item.name).join(", ");
 
@@ -147,20 +149,25 @@ const App: React.FC = () => {
           />
         </div>
 
-        {/* ✅ MENU WITH IMAGES */}
+        {/* MENU */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredItems.map((item) => (
             <div key={item.id} className="bg-white p-4 rounded-xl shadow">
 
-              {/* 🔥 IMAGE ADDED HERE */}
+              {/* ✅ IMAGE (SAFE LOAD) */}
               <img
                 src={item.image}
                 alt={item.name}
+                onError={(e) => (e.currentTarget.style.display = "none")}
                 className="w-full h-40 object-cover rounded-lg"
               />
 
               <h3 className="text-xl font-bold mt-3">{item.name}</h3>
-              <p className="text-blue-600 font-semibold">R{item.price}</p>
+
+              {/* ✅ FIX PRICE DISPLAY */}
+              <p className="text-blue-600 font-semibold">
+                R{Number(item.price)}
+              </p>
 
               <button
                 onClick={() => addToCart(item)}
@@ -182,14 +189,15 @@ const App: React.FC = () => {
           ) : (
             cart.map((item, index) => (
               <div key={index} className="flex justify-between mb-2">
-                <span>{item.name} - R{item.price}</span>
+                <span>{item.name} - R{Number(item.price)}</span>
                 <button onClick={() => removeFromCart(index)}>Remove</button>
               </div>
             ))
           )}
 
+          {/* ✅ FIX TOTAL */}
           <p className="mt-4 font-bold">
-            Total: R{cart.reduce((t, i) => t + i.price, 0)}
+            Total: R{cart.reduce((t, i) => t + Number(i.price), 0)}
           </p>
 
           {/* DELIVERY TYPE */}
