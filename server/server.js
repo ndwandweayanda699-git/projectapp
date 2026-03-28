@@ -27,7 +27,6 @@ if (!YOCO_WEBHOOK_SECRET) {
 // ==============================
 app.use('/webhook/yoco', express.raw({ type: '*/*' }));
 app.use(express.json());
-
 app.use(cors({ origin: "*" }));
 
 app.use((req, res, next) => {
@@ -38,7 +37,7 @@ app.use((req, res, next) => {
 // ==============================
 // 🖼️ SERVE IMAGES (✅ FIXED)
 // ==============================
-app.use('/images', express.static(path.join(process.cwd(), 'public/images')));
+app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
 // ==============================
 // 🗄️ DATABASE
@@ -118,40 +117,27 @@ app.get('/api/menu', async (req, res) => {
 });
 
 app.get('/api/admin/menu', verifyAdmin, async (req, res) => {
-  try {
-    const result = await pool.query(
-      "SELECT * FROM menu_items ORDER BY id ASC"
-    );
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch menu" });
-  }
+  const result = await pool.query("SELECT * FROM menu_items ORDER BY id ASC");
+  res.json(result.rows);
 });
 
 app.put('/api/admin/menu/:id/toggle', verifyAdmin, async (req, res) => {
-  try {
-    await pool.query(
-      "UPDATE menu_items SET is_available = NOT is_available WHERE id = $1",
-      [req.params.id]
-    );
-    res.json({ success: true });
-  } catch {
-    res.status(500).json({ error: "Toggle failed" });
-  }
+  await pool.query(
+    "UPDATE menu_items SET is_available = NOT is_available WHERE id = $1",
+    [req.params.id]
+  );
+  res.json({ success: true });
 });
 
 app.post('/api/admin/menu', verifyAdmin, async (req, res) => {
   const { name, price, image } = req.body;
 
-  try {
-    const result = await pool.query(
-      "INSERT INTO menu_items (name, price, image) VALUES ($1, $2, $3) RETURNING *",
-      [name, price, image]
-    );
-    res.json(result.rows[0]);
-  } catch {
-    res.status(500).json({ error: "Add failed" });
-  }
+  const result = await pool.query(
+    "INSERT INTO menu_items (name, price, image) VALUES ($1, $2, $3) RETURNING *",
+    [name, price, image]
+  );
+
+  res.json(result.rows[0]);
 });
 
 // ==============================
@@ -160,24 +146,15 @@ app.post('/api/admin/menu', verifyAdmin, async (req, res) => {
 app.post('/api/orders', async (req, res) => {
   const { user_id, item_ordered, price, payment_method } = req.body;
 
-  if (!user_id || !item_ordered || !price) {
-    return res.status(400).json({ error: "Missing fields" });
-  }
+  const result = await pool.query(
+    `INSERT INTO orders
+    (user_id, item_ordered, price, payment_method, payment_status, delivery_status, created_at)
+    VALUES ($1,$2,$3,$4,'pending','pending',NOW())
+    RETURNING *`,
+    [user_id, item_ordered, price, payment_method]
+  );
 
-  try {
-    const result = await pool.query(
-      `INSERT INTO orders
-      (user_id, item_ordered, price, payment_method, payment_status, delivery_status, created_at)
-      VALUES ($1,$2,$3,$4,'pending','pending',NOW())
-      RETURNING *`,
-      [user_id, item_ordered, price, payment_method]
-    );
-
-    res.json({ order: result.rows[0] });
-
-  } catch {
-    res.status(500).json({ error: "Create failed" });
-  }
+  res.json({ order: result.rows[0] });
 });
 
 // ==============================
@@ -192,9 +169,7 @@ app.post('/webhook/yoco', async (req, res) => {
       .update(req.body)
       .digest('hex');
 
-    if (signature !== expectedSignature) {
-      return res.sendStatus(400);
-    }
+    if (signature !== expectedSignature) return res.sendStatus(400);
 
     const event = JSON.parse(req.body.toString());
 

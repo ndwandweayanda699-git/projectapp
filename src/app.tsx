@@ -20,7 +20,14 @@ const App: React.FC = () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/menu`);
       const data = await res.json();
-      setMenu(data);
+
+      // 🔥 Ensure price is always a number
+      const cleanData = data.map((item: any) => ({
+        ...item,
+        price: Number(item.price)
+      }));
+
+      setMenu(cleanData);
     } catch (err) {
       console.error("Menu fetch error:", err);
     }
@@ -35,6 +42,7 @@ const App: React.FC = () => {
     item.name.toLowerCase().includes(search.toLowerCase())
   );
 
+  // ✅ ADD TO CART (safe)
   const addToCart = (item: any) => {
     setCart((prevCart) => [...prevCart, item]);
   };
@@ -63,8 +71,7 @@ const App: React.FC = () => {
 
     setLoading(true);
 
-    // ✅ FIXED TOTAL
-    const totalAmount = cart.reduce((sum, item) => sum + Number(item.price), 0);
+    const totalAmount = cart.reduce((sum, item) => sum + item.price, 0);
 
     const orderRef = "Order-" + Date.now();
     const itemOrdered = cart.map((item) => item.name).join(", ");
@@ -154,9 +161,9 @@ const App: React.FC = () => {
           {filteredItems.map((item) => (
             <div key={item.id} className="bg-white p-4 rounded-xl shadow">
 
-              {/* ✅ IMAGE (SAFE LOAD) */}
+              {/* ✅ FIXED IMAGE */}
               <img
-                src={item.image}
+                src={`${BACKEND_URL}${item.image}`}
                 alt={item.name}
                 onError={(e) => (e.currentTarget.style.display = "none")}
                 className="w-full h-40 object-cover rounded-lg"
@@ -164,9 +171,8 @@ const App: React.FC = () => {
 
               <h3 className="text-xl font-bold mt-3">{item.name}</h3>
 
-              {/* ✅ FIX PRICE DISPLAY */}
               <p className="text-blue-600 font-semibold">
-                R{Number(item.price)}
+                R{item.price}
               </p>
 
               <button
@@ -189,15 +195,14 @@ const App: React.FC = () => {
           ) : (
             cart.map((item, index) => (
               <div key={index} className="flex justify-between mb-2">
-                <span>{item.name} - R{Number(item.price)}</span>
+                <span>{item.name} - R{item.price}</span>
                 <button onClick={() => removeFromCart(index)}>Remove</button>
               </div>
             ))
           )}
 
-          {/* ✅ FIX TOTAL */}
           <p className="mt-4 font-bold">
-            Total: R{cart.reduce((t, i) => t + Number(i.price), 0)}
+            Total: R{cart.reduce((t, i) => t + i.price, 0)}
           </p>
 
           {/* DELIVERY TYPE */}
@@ -219,7 +224,6 @@ const App: React.FC = () => {
             </label>
           </div>
 
-          {/* ADDRESS */}
           {deliveryType === "delivery" && (
             <input
               type="text"
@@ -230,7 +234,6 @@ const App: React.FC = () => {
             />
           )}
 
-          {/* PHONE */}
           <input
             type="text"
             placeholder="Phone"
