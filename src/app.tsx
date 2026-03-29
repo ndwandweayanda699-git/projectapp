@@ -57,7 +57,7 @@ const App: React.FC = () => {
   };
 
   // ==============================
-  // 💳 PAY (FINAL)
+  // 💳 PAY
   // ==============================
   const handlePlaceOrder = async () => {
     if (loading) return;
@@ -107,10 +107,18 @@ const App: React.FC = () => {
         return;
       }
 
-      // ✅ clear cart BEFORE redirect
+      // ✅ SAVE ORDER NUMBER
+      if (data.orderNumber) {
+        localStorage.setItem("orderNumber", data.orderNumber);
+      }
+
+      // ✅ SAVE ORDER ID (fallback)
+      if (data.order?.id) {
+        localStorage.setItem("orderId", data.order.id.toString());
+      }
+
       setCart([]);
 
-      // ✅ redirect to Yoco payment page
       window.location.href = data.checkoutUrl;
 
     } catch (error) {
@@ -128,6 +136,14 @@ const App: React.FC = () => {
         <h1 className="text-4xl font-black">
           Blue <span className="text-blue-600">Plate</span> Special
         </h1>
+
+        {/* ✅ STEP 9 TRACK BUTTON */}
+        <button
+          onClick={() => navigate("/track")}
+          className="absolute top-6 left-6 bg-blue-600 text-white px-4 py-2 rounded-lg"
+        >
+          Track Order
+        </button>
 
         <button
           onClick={() => navigate("/manager")}

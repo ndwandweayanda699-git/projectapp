@@ -128,12 +128,14 @@ app.post('/api/pay', async (req, res) => {
   try {
     const { user_id, item_ordered, price } = req.body;
 
+    const orderNumber = "BP" + Date.now();
+
     const result = await pool.query(
       `INSERT INTO orders
-      (user_id, item_ordered, price, payment_method, payment_status, delivery_status, created_at)
-      VALUES ($1,$2,$3,'yoco','pending','pending',NOW())
+      (order_number, user_id, item_ordered, price, payment_method, payment_status, status, delivery_status, created_at)
+      VALUES ($1,$2,$3,$4,'yoco','pending','pending','pending',NOW())
       RETURNING *`,
-      [user_id, item_ordered, price]
+      [orderNumber, user_id, item_ordered, price]
     );
 
     const order = result.rows[0];
@@ -147,9 +149,7 @@ app.post('/api/pay', async (req, res) => {
       body: JSON.stringify({
         amount: Math.round(price * 100),
         currency: "ZAR",
-        metadata: {
-          order_id: order.id
-        },
+        metadata: { order_id: order.id },
         successUrl: `https://projectapp-sk4p.onrender.com/success?order_id=${order.id}`,
         cancelUrl: `https://projectapp-sk4p.onrender.com/success?order_id=${order.id}`
       })
@@ -163,6 +163,7 @@ app.post('/api/pay', async (req, res) => {
 
     res.json({
       order,
+      orderNumber,
       checkoutUrl: data.redirectUrl
     });
 
@@ -173,28 +174,81 @@ app.post('/api/pay', async (req, res) => {
 });
 
 // ==============================
-// 📦 FETCH ORDERS
+// 📦 TRACK ORDER (by order number)
+// ==============================
+app.get('/api/track/:orderNumber', async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT order_number, status, payment_status FROM orders WHERE order_number = $1",
+      [req.params.orderNumber]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    res.json(result.rows[0]);
+
+  } catch (err) {
+    res.status(500).json({ error: "Tracking failed" });
+  }
+});
+
+// ==============================
+// 📦 FETCH ALL ORDERS (ADMIN)
 // ==============================
 app.get('/api/orders', verifyAdmin, async (req, res) => {
-  const result = await pool.query(
-    "SELECT * FROM orders ORDER BY id DESC"
-  );
+  const result = await pool.query("SELECT * FROM orders ORDER BY id DESC");
   res.json(result.rows);
 });
 
 // ==============================
-// ❌ DELETE ORDER (🔥 NEW)
+// 📦 GET SINGLE ORDER (🔥 STEP 8)
 // ==============================
-app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
+app.get('/api/orders/:id', async (req, res) => {
   try {
-    await pool.query(
-      "DELETE FROM orders WHERE id = $1",
+    const result = await pool.query(
+      "SELECT * FROM orders WHERE id = $1",
       [req.params.id]
     );
 
-    res.json({ success: true });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    res.json(result.rows[0]);
+
   } catch (err) {
-    console.error("Delete error:", err);
+    res.status(500).json({ error: "Failed to fetch order" });
+  }
+});
+
+// ==============================
+// 🔄 UPDATE ORDER STATUS (SECURED)
+// ==============================
+app.put('/api/orders/:id/status', verifyKitchen, async (req, res) => {
+  const { status } = req.body;
+
+  try {
+    await pool.query(
+      "UPDATE orders SET status=$1 WHERE id=$2",
+      [status, req.params.id]
+    );
+
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: "Failed to update status" });
+  }
+});
+
+// ==============================
+// ❌ DELETE ORDER
+// ==============================
+app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM orders WHERE id = $1", [req.params.id]);
+    res.json({ success: true });
+  } catch {
     res.status(500).json({ error: "Failed to delete order" });
   }
 });
@@ -212,7 +266,6 @@ app.post('/webhook/yoco', async (req, res) => {
       .digest('hex');
 
     if (signature !== expectedSignature) {
-      console.log("❌ Invalid webhook signature");
       return res.sendStatus(400);
     }
 
@@ -222,17 +275,14 @@ app.post('/webhook/yoco', async (req, res) => {
       const orderId = event.data?.metadata?.order_id;
 
       await pool.query(
-        `UPDATE orders SET payment_status='paid' WHERE id=$1`,
+        `UPDATE orders SET payment_status='paid', status='preparing' WHERE id=$1`,
         [orderId]
       );
-
-      console.log(`✅ Order ${orderId} PAID`);
     }
 
     res.sendStatus(200);
 
-  } catch (err) {
-    console.error(err);
+  } catch {
     res.sendStatus(500);
   }
 });
@@ -242,9 +292,7 @@ app.post('/webhook/yoco', async (req, res) => {
 // ==============================
 app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
   const result = await pool.query(
-    `SELECT * FROM orders
-     WHERE payment_status='paid'
-     ORDER BY id ASC`
+    `SELECT * FROM orders WHERE payment_status='paid' ORDER BY id ASC`
   );
   res.json(result.rows);
 });
@@ -253,7 +301,6 @@ app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
 // 📦 FRONTEND
 // ==============================
 app.use(express.static(path.join(__dirname, 'dist')));
-
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
