@@ -11,7 +11,7 @@ const Manager: React.FC = () => {
 
   const getHeaders = () => ({
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${localStorage.getItem("token")}`
+    Authorization: `Bearer ${localStorage.getItem("token")}`
   });
 
   // ==============================
@@ -48,7 +48,7 @@ const Manager: React.FC = () => {
   };
 
   // ==============================
-  // 📥 FETCH ORDERS
+  // 📥 FETCH ORDERS (FIXED 🔥)
   // ==============================
   const fetchOrders = useCallback(async () => {
     const token = localStorage.getItem("token");
@@ -57,9 +57,14 @@ const Manager: React.FC = () => {
     try {
       setIsRefreshing(true);
 
-      const res = await fetch(`${BACKEND_URL}/api/orders`, {
+      const res = await fetch(`${BACKEND_URL}/api/kitchen/orders`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+
+      if (!res.ok) {
+        console.error("Orders fetch failed:", res.status);
+        return;
+      }
 
       const data = await res.json();
       setOrders(Array.isArray(data) ? data : []);
@@ -71,7 +76,7 @@ const Manager: React.FC = () => {
   }, []);
 
   // ==============================
-  // 🍔 FETCH MENU (NEW 🔥)
+  // 🍔 FETCH MENU
   // ==============================
   const fetchMenu = async () => {
     try {
@@ -79,8 +84,13 @@ const Manager: React.FC = () => {
         headers: getHeaders()
       });
 
+      if (!res.ok) {
+        console.error("Menu fetch failed:", res.status);
+        return;
+      }
+
       const data = await res.json();
-      setMenu(data);
+      setMenu(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Menu fetch error", err);
     }
@@ -91,27 +101,20 @@ const Manager: React.FC = () => {
   // ==============================
   const toggleItem = async (id: number) => {
     try {
-      await fetch(`${BACKEND_URL}/api/admin/menu/${id}/toggle`, {
+      const res = await fetch(`${BACKEND_URL}/api/admin/menu/${id}/toggle`, {
         method: "PUT",
         headers: getHeaders()
       });
 
-      fetchMenu(); // refresh
-    } catch (err) {
+      if (!res.ok) {
+        alert("Toggle failed");
+        return;
+      }
+
+      fetchMenu();
+    } catch {
       alert("Toggle failed");
     }
-  };
-
-  // ==============================
-  // 🚚 UPDATE DELIVERY
-  // ==============================
-  const updateDelivery = async (orderId: number, status: string) => {
-    await fetch(`${BACKEND_URL}/api/kitchen/orders/${orderId}`, {
-      method: "PUT",
-      headers: getHeaders(),
-      body: JSON.stringify({ status })
-    });
-    fetchOrders();
   };
 
   // ==============================
@@ -133,14 +136,12 @@ const Manager: React.FC = () => {
       fetchMenu();
     }
 
-    let interval: any;
-
-    if (token) {
-      interval = setInterval(() => {
+    const interval = setInterval(() => {
+      if (localStorage.getItem("token")) {
         fetchOrders();
         fetchMenu();
-      }, 5000);
-    }
+      }
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [fetchOrders]);
@@ -192,8 +193,10 @@ const Manager: React.FC = () => {
         <h2>Revenue: R{totalPaidRevenue.toFixed(2)}</h2>
       </div>
 
-      {/* 🍔 MENU CONTROL (NEW 🔥) */}
+      {/* 🍔 MENU CONTROL */}
       <h2 style={{ marginTop: 30 }}>🍔 Menu Control</h2>
+
+      {menu.length === 0 && <p>No menu items found</p>}
 
       {menu.map(item => (
         <div key={item.id} style={{
@@ -225,6 +228,8 @@ const Manager: React.FC = () => {
       {/* 📦 ORDERS */}
       <h2 style={{ marginTop: 30 }}>Orders</h2>
 
+      {orders.length === 0 && <p>No orders yet</p>}
+
       {orders.map(order => (
         <div key={order.id} style={{
           background: "white",
@@ -235,10 +240,7 @@ const Manager: React.FC = () => {
           <strong>Order #{order.id}</strong>
           <p>{order.item_ordered}</p>
           <p>R{order.price}</p>
-
-          <button onClick={() => updateDelivery(order.id, "delivered")}>
-            Mark Delivered
-          </button>
+          <p>Status: {order.payment_status}</p>
         </div>
       ))}
 
