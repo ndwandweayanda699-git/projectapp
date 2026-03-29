@@ -2,33 +2,53 @@ import React, { useEffect, useState } from 'react';
 import Input from './components/ui/input';
 import { useNavigate } from "react-router-dom";
 
+// ==============================
+// 🔧 TYPES (TS)
+// ==============================
+type MenuItem = {
+  id: number;
+  name: string;
+  price: number;
+  image: string;
+};
+
+type CartItem = MenuItem;
+
+// ==============================
+// 🔗 CONFIG
+// ==============================
 const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
 
 const App: React.FC = () => {
   const navigate = useNavigate();
 
-  const [search, setSearch] = useState("");
-  const [menu, setMenu] = useState<any[]>([]);
-  const [cart, setCart] = useState<any[]>([]);
-  const [address, setAddress] = useState("");
-  const [phone, setPhone] = useState("");
-  const [loading, setLoading] = useState(false);
+  // ==============================
+  // 🧠 STATE
+  // ==============================
+  const [search, setSearch] = useState<string>("");
+  const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [address, setAddress] = useState<string>("");
+  const [phone, setPhone] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
   const [deliveryType, setDeliveryType] = useState<"delivery" | "collection">("delivery");
 
-  // ✅ NEW
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  // ✅ NEW: Terms agreement
+  const [agreeTerms, setAgreeTerms] = useState<boolean>(false);
 
   // ==============================
   // 🍔 FETCH MENU
   // ==============================
-  const fetchMenu = async () => {
+  const fetchMenu = async (): Promise<void> => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/menu`);
       const data = await res.json();
 
-      const cleanData = data.map((item: any) => ({
-        ...item,
-        price: Number(item.price)
+      const cleanData: MenuItem[] = data.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        price: Number(item.price),
+        image: item.image
       }));
 
       setMenu(cleanData);
@@ -51,18 +71,18 @@ const App: React.FC = () => {
   // ==============================
   // 🛒 CART
   // ==============================
-  const addToCart = (item: any) => {
+  const addToCart = (item: MenuItem): void => {
     setCart((prevCart) => [...prevCart, item]);
   };
 
-  const removeFromCart = (index: number) => {
+  const removeFromCart = (index: number): void => {
     setCart((prevCart) => prevCart.filter((_, i) => i !== index));
   };
 
   // ==============================
   // 💳 PAY
   // ==============================
-  const handlePlaceOrder = async () => {
+  const handlePlaceOrder = async (): Promise<void> => {
     if (loading) return;
 
     if (cart.length === 0) {
@@ -70,8 +90,14 @@ const App: React.FC = () => {
       return;
     }
 
+    // ✅ FIXED: Delivery vs Collection validation
     if (deliveryType === "delivery" && !address.trim()) {
       alert("Please enter delivery address!");
+      return;
+    }
+
+    if (deliveryType === "collection" && !phone.trim()) {
+      alert("Please enter phone number for collection!");
       return;
     }
 
@@ -81,8 +107,8 @@ const App: React.FC = () => {
     }
 
     // ✅ TERMS CHECK
-    if (!acceptedTerms) {
-      alert("Please accept Terms & Conditions before ordering.");
+    if (!agreeTerms) {
+      alert("You must agree to Terms & Conditions");
       return;
     }
 
@@ -110,23 +136,28 @@ const App: React.FC = () => {
       const data = await res.json();
 
       if (!res.ok || !data.checkoutUrl) {
+        console.error("Backend error:", data);
         alert(data.error || "Payment failed");
         setLoading(false);
         return;
       }
 
+      // ✅ SAVE ORDER NUMBER
       if (data.orderNumber) {
         localStorage.setItem("orderNumber", data.orderNumber);
       }
 
+      // ✅ SAVE ORDER ID
       if (data.order?.id) {
         localStorage.setItem("orderId", data.order.id.toString());
       }
 
       setCart([]);
+
       window.location.href = data.checkoutUrl;
 
     } catch (error) {
+      console.error("Payment error:", error);
       alert("Payment failed");
       setLoading(false);
     }
@@ -140,6 +171,13 @@ const App: React.FC = () => {
         <h1 className="text-4xl font-black">
           Blue <span className="text-blue-600">Plate</span> Special
         </h1>
+
+        <button
+          onClick={() => navigate("/track")}
+          className="absolute top-6 left-6 bg-blue-600 text-white px-4 py-2 rounded-lg"
+        >
+          Track Order
+        </button>
 
         <button
           onClick={() => navigate("/manager")}
@@ -162,7 +200,7 @@ const App: React.FC = () => {
         <div className="flex justify-center mb-10">
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
             placeholder="Search food..."
           />
         </div>
@@ -175,6 +213,7 @@ const App: React.FC = () => {
               <img
                 src={`${BACKEND_URL}${item.image}`}
                 alt={item.name}
+                onError={(e) => (e.currentTarget.style.display = "none")}
                 className="w-full h-40 object-cover rounded-lg"
               />
 
@@ -199,33 +238,75 @@ const App: React.FC = () => {
         <div className="mt-16 bg-white p-6 rounded-xl shadow-lg max-w-2xl mx-auto border">
           <h2 className="text-2xl font-bold mb-6">Your Cart</h2>
 
-          {cart.map((item, index) => (
-            <div key={index} className="flex justify-between mb-2">
-              <span>{item.name} - R{item.price}</span>
-              <button onClick={() => removeFromCart(index)}>Remove</button>
-            </div>
-          ))}
+          {cart.length === 0 ? (
+            <p className="text-gray-500 italic">Your cart is empty.</p>
+          ) : (
+            cart.map((item, index) => (
+              <div key={index} className="flex justify-between mb-2">
+                <span>{item.name} - R{item.price}</span>
+                <button onClick={() => removeFromCart(index)}>Remove</button>
+              </div>
+            ))
+          )}
 
           <p className="mt-4 font-bold">
             Total: R{cart.reduce((t, i) => t + i.price, 0)}
           </p>
 
-          {/* TERMS & CONDITIONS */}
-          <div className="mt-6 p-4 border rounded bg-gray-50 text-sm">
+          {/* DELIVERY TYPE */}
+          <div className="mt-6 flex gap-6">
+            <label>
+              <input
+                type="radio"
+                checked={deliveryType === "delivery"}
+                onChange={() => setDeliveryType("delivery")}
+              /> Delivery
+            </label>
+
+            <label>
+              <input
+                type="radio"
+                checked={deliveryType === "collection"}
+                onChange={() => setDeliveryType("collection")}
+              /> Collection
+            </label>
+          </div>
+
+          {deliveryType === "delivery" && (
+            <input
+              type="text"
+              placeholder="Address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className="w-full mt-4 p-3 border"
+            />
+          )}
+
+          <input
+            type="text"
+            placeholder="Phone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full mt-4 p-3 border"
+          />
+
+          {/* ==============================
+              📜 TERMS & CONDITIONS
+          ============================== */}
+          <div className="mt-6 border p-4 rounded-lg bg-gray-50">
             <h3 className="font-bold mb-2">Terms & Conditions</h3>
-            <ul className="list-disc pl-5 space-y-1">
+            <ul className="text-sm list-disc ml-5 space-y-1">
               <li>No refunds once payment is completed.</li>
-              <li>Please ensure your order is correct before paying.</li>
-              <li>Delivery times may vary during peak hours.</li>
+              <li>Please ensure your order details are correct before paying.</li>
+              <li>Delivery times may vary depending on demand.</li>
               <li>Collection orders must be picked up within 30 minutes.</li>
             </ul>
 
-            <label className="flex items-center mt-4">
+            <label className="flex items-center gap-2 mt-3">
               <input
                 type="checkbox"
-                checked={acceptedTerms}
-                onChange={() => setAcceptedTerms(!acceptedTerms)}
-                className="mr-2"
+                checked={agreeTerms}
+                onChange={(e) => setAgreeTerms(e.target.checked)}
               />
               I agree to the Terms & Conditions
             </label>
