@@ -81,7 +81,7 @@ const Manager: React.FC = () => {
   }, []);
 
   // ==============================
-  // 🍔 FETCH MENU (FIXED 🔥)
+  // 🍔 FETCH MENU
   // ==============================
   const fetchMenu = async () => {
     try {
@@ -91,14 +91,11 @@ const Manager: React.FC = () => {
 
       const data = await res.json();
 
-      console.log("MENU RESPONSE:", data); // 🔍 DEBUG
-
       if (res.ok) {
         setMenu(Array.isArray(data) ? data : []);
       } else {
         console.error("Menu fetch failed:", data);
 
-        // 🔥 TOKEN EXPIRED → FORCE LOGOUT
         if (data?.error === "Invalid token" || data?.error === "No token") {
           handleLogout();
         }
@@ -142,6 +139,26 @@ const Manager: React.FC = () => {
       fetchOrders();
     } catch {
       alert("Update failed");
+    }
+  };
+
+  // ==============================
+  // ❌ DELETE ORDER (🔥 NEW)
+  // ==============================
+  const deleteOrder = async (orderId: number) => {
+    const confirmDelete = window.confirm("Delete this order?");
+    if (!confirmDelete) return;
+
+    try {
+      await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
+        method: "DELETE",
+        headers: getHeaders()
+      });
+
+      fetchOrders(); // refresh list
+    } catch (err) {
+      console.error("Delete failed:", err);
+      alert("Delete failed");
     }
   };
 
@@ -276,6 +293,20 @@ const Manager: React.FC = () => {
 
             <button onClick={() => updateDelivery(order.id, "delivered")}>
               Mark Delivered
+            </button>
+
+            {/* 🔥 DELETE BUTTON */}
+            <button
+              onClick={() => deleteOrder(order.id)}
+              style={{
+                marginLeft: 10,
+                background: "red",
+                color: "white",
+                padding: "6px 12px",
+                borderRadius: 6
+              }}
+            >
+              Delete
             </button>
           </div>
         ))
