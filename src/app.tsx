@@ -78,7 +78,7 @@ const App: React.FC = () => {
   };
 
   // ==============================
-  // 💳 PAY (UPDATED FOR MULTI-ORDER)
+  // 💳 PAY (MULTI-ORDER + VALIDATION)
   // ==============================
   const handlePlaceOrder = async (): Promise<void> => {
     if (loading) return;
@@ -145,18 +145,14 @@ const App: React.FC = () => {
       if (orderNumber) {
         const existingOrders = JSON.parse(localStorage.getItem("orders") || "[]");
 
-        // add newest first
         existingOrders.unshift(orderNumber);
 
-        // limit (optional)
         const limitedOrders = existingOrders.slice(0, 10);
 
         localStorage.setItem("orders", JSON.stringify(limitedOrders));
 
-        // still save latest for quick access
+        // latest quick access
         localStorage.setItem("orderNumber", orderNumber);
-
-        console.log("✅ Orders saved:", limitedOrders);
       }
 
       if (data.order?.id) {
@@ -177,7 +173,7 @@ const App: React.FC = () => {
   };
 
   // ==============================
-  // ✅ TRACK BUTTON (UPDATED)
+  // ✅ TRACK BUTTON
   // ==============================
   const handleTrackOrder = () => {
     const orders = JSON.parse(localStorage.getItem("orders") || "[]");
@@ -187,7 +183,6 @@ const App: React.FC = () => {
       return;
     }
 
-    // go to track page (it will handle list)
     navigate("/track");
   };
 
@@ -280,6 +275,65 @@ const App: React.FC = () => {
           <p className="mt-4 font-bold">
             Total: R{cart.reduce((t, i) => t + i.price, 0)}
           </p>
+
+          {/* DELIVERY / COLLECTION */}
+          <div className="mt-6 flex gap-6">
+            <label>
+              <input
+                type="radio"
+                checked={deliveryType === "delivery"}
+                onChange={() => setDeliveryType("delivery")}
+              /> Delivery
+            </label>
+
+            <label>
+              <input
+                type="radio"
+                checked={deliveryType === "collection"}
+                onChange={() => setDeliveryType("collection")}
+              /> Collection
+            </label>
+          </div>
+
+          {/* ADDRESS */}
+          {deliveryType === "delivery" && (
+            <input
+              type="text"
+              placeholder="Address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className="w-full mt-4 p-3 border"
+            />
+          )}
+
+          {/* PHONE */}
+          <input
+            type="text"
+            placeholder="Phone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full mt-4 p-3 border"
+          />
+
+          {/* TERMS */}
+          <div className="mt-6 border p-4 rounded-lg bg-gray-50">
+            <h3 className="font-bold mb-2">Terms & Conditions</h3>
+            <ul className="text-sm list-disc ml-5 space-y-1">
+              <li>No refunds once payment is completed.</li>
+              <li>Please ensure your order details are correct before paying.</li>
+              <li>Delivery times may vary depending on demand.</li>
+              <li>Collection orders must be picked up within 30 minutes.</li>
+            </ul>
+
+            <label className="flex items-center gap-2 mt-3">
+              <input
+                type="checkbox"
+                checked={agreeTerms}
+                onChange={(e) => setAgreeTerms(e.target.checked)}
+              />
+              I agree to the Terms & Conditions
+            </label>
+          </div>
 
           <button
             onClick={handlePlaceOrder}
