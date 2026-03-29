@@ -43,4 +43,4 @@ const Success: React.FC = () => {
   );
 };
 
-export default Success;g
+export default Success;
