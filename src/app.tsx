@@ -33,7 +33,6 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [deliveryType, setDeliveryType] = useState<"delivery" | "collection">("delivery");
 
-  // ✅ NEW: Terms agreement
   const [agreeTerms, setAgreeTerms] = useState<boolean>(false);
 
   // ==============================
@@ -80,7 +79,7 @@ const App: React.FC = () => {
   };
 
   // ==============================
-  // 💳 PAY
+  // 💳 PAY (FIXED)
   // ==============================
   const handlePlaceOrder = async (): Promise<void> => {
     if (loading) return;
@@ -90,14 +89,8 @@ const App: React.FC = () => {
       return;
     }
 
-    // ✅ FIXED: Delivery vs Collection validation
     if (deliveryType === "delivery" && !address.trim()) {
       alert("Please enter delivery address!");
-      return;
-    }
-
-    if (deliveryType === "collection" && !phone.trim()) {
-      alert("Please enter phone number for collection!");
       return;
     }
 
@@ -106,7 +99,6 @@ const App: React.FC = () => {
       return;
     }
 
-    // ✅ TERMS CHECK
     if (!agreeTerms) {
       alert("You must agree to Terms & Conditions");
       return;
@@ -133,18 +125,30 @@ const App: React.FC = () => {
         })
       });
 
-      const data = await res.json();
+      // 🔥 SAFE JSON PARSE
+      let data: any;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error("Invalid server response");
+      }
+
+      console.log("🧾 ORDER RESPONSE:", data);
 
       if (!res.ok || !data.checkoutUrl) {
-        console.error("Backend error:", data);
-        alert(data.error || "Payment failed");
+        alert(data?.error || "Payment failed");
         setLoading(false);
         return;
       }
 
-      // ✅ SAVE ORDER NUMBER
-      if (data.orderNumber) {
-        localStorage.setItem("orderNumber", data.orderNumber);
+      // ✅ FORCE SAVE ORDER NUMBER
+      const orderNumber = data.orderNumber || data.order?.order_number;
+
+      if (orderNumber) {
+        localStorage.setItem("orderNumber", orderNumber);
+        console.log("✅ Saved orderNumber:", orderNumber);
+      } else {
+        console.warn("⚠️ No orderNumber returned!");
       }
 
       // ✅ SAVE ORDER ID
@@ -154,7 +158,10 @@ const App: React.FC = () => {
 
       setCart([]);
 
-      window.location.href = data.checkoutUrl;
+      // 🔥 SMALL DELAY ENSURES STORAGE SAVED
+      setTimeout(() => {
+        window.location.href = data.checkoutUrl;
+      }, 300);
 
     } catch (error) {
       console.error("Payment error:", error);
@@ -253,7 +260,6 @@ const App: React.FC = () => {
             Total: R{cart.reduce((t, i) => t + i.price, 0)}
           </p>
 
-          {/* DELIVERY TYPE */}
           <div className="mt-6 flex gap-6">
             <label>
               <input
@@ -290,9 +296,6 @@ const App: React.FC = () => {
             className="w-full mt-4 p-3 border"
           />
 
-          {/* ==============================
-              📜 TERMS & CONDITIONS
-          ============================== */}
           <div className="mt-6 border p-4 rounded-lg bg-gray-50">
             <h3 className="font-bold mb-2">Terms & Conditions</h3>
             <ul className="text-sm list-disc ml-5 space-y-1">

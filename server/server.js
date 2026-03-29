@@ -113,6 +113,22 @@ app.get('/api/admin/menu', verifyAdmin, async (req, res) => {
   res.json(result.rows);
 });
 
+// ✅ FIXED: Toggle must return JSON (IMPORTANT)
+app.put('/api/admin/menu/:id/toggle', verifyAdmin, async (req, res) => {
+  try {
+    await pool.query(
+      "UPDATE menu_items SET is_available = NOT is_available WHERE id = $1",
+      [req.params.id]
+    );
+
+    res.json({ success: true }); // 🔥 REQUIRED (fixes your error)
+
+  } catch (err) {
+    console.error("Toggle error:", err);
+    res.status(500).json({ error: "Toggle failed" });
+  }
+});
+
 // ==============================
 // 💳 CREATE PAYMENT
 // ==============================
@@ -149,6 +165,10 @@ app.post('/api/pay', async (req, res) => {
 
     const data = await response.json();
 
+    if (!data.redirectUrl) {
+      return res.status(500).json({ error: "Yoco failed" });
+    }
+
     res.json({
       order,
       orderNumber,
@@ -165,30 +185,42 @@ app.post('/api/pay', async (req, res) => {
 // 📦 TRACK ORDER
 // ==============================
 app.get('/api/track/:orderNumber', async (req, res) => {
-  const result = await pool.query(
-    "SELECT order_number, status, payment_status FROM orders WHERE order_number = $1",
-    [req.params.orderNumber]
-  );
+  try {
+    const result = await pool.query(
+      "SELECT order_number, status, payment_status FROM orders WHERE order_number = $1",
+      [req.params.orderNumber]
+    );
 
-  if (result.rows.length === 0) {
-    return res.status(404).json({ error: "Order not found" });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    res.json(result.rows[0]);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Tracking failed" });
   }
-
-  res.json(result.rows[0]);
 });
 
 // ==============================
-// 🔥 KITCHEN UPDATE (FIXED)
+// 🔥 KITCHEN UPDATE
 // ==============================
 app.put('/api/kitchen/orders/:id', verifyKitchen, async (req, res) => {
-  const { status } = req.body;
+  try {
+    const { status } = req.body;
 
-  await pool.query(
-    "UPDATE orders SET delivery_status=$1 WHERE id=$2",
-    [status, req.params.id]
-  );
+    await pool.query(
+      "UPDATE orders SET delivery_status=$1 WHERE id=$2",
+      [status, req.params.id]
+    );
 
-  res.json({ success: true });
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Update failed" });
+  }
 });
 
 // ==============================
@@ -232,7 +264,8 @@ app.post('/webhook/yoco', async (req, res) => {
 
     res.sendStatus(200);
 
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.sendStatus(500);
   }
 });
