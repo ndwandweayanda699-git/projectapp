@@ -2,50 +2,33 @@ import React, { useEffect, useState } from 'react';
 import Input from './components/ui/input';
 import { useNavigate } from "react-router-dom";
 
-// ==============================
-// 🔧 TYPES (TS)
-// ==============================
-type MenuItem = {
-  id: number;
-  name: string;
-  price: number;
-  image: string;
-};
-
-type CartItem = MenuItem;
-
-// ==============================
-// 🔗 CONFIG
-// ==============================
 const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
 
 const App: React.FC = () => {
   const navigate = useNavigate();
 
-  // ==============================
-  // 🧠 STATE
-  // ==============================
-  const [search, setSearch] = useState<string>("");
-  const [menu, setMenu] = useState<MenuItem[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [address, setAddress] = useState<string>("");
-  const [phone, setPhone] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(false);
+  const [search, setSearch] = useState("");
+  const [menu, setMenu] = useState<any[]>([]);
+  const [cart, setCart] = useState<any[]>([]);
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
   const [deliveryType, setDeliveryType] = useState<"delivery" | "collection">("delivery");
+
+  // ✅ NEW
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   // ==============================
   // 🍔 FETCH MENU
   // ==============================
-  const fetchMenu = async (): Promise<void> => {
+  const fetchMenu = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/menu`);
       const data = await res.json();
 
-      const cleanData: MenuItem[] = data.map((item: any) => ({
-        id: item.id,
-        name: item.name,
-        price: Number(item.price),
-        image: item.image
+      const cleanData = data.map((item: any) => ({
+        ...item,
+        price: Number(item.price)
       }));
 
       setMenu(cleanData);
@@ -68,18 +51,18 @@ const App: React.FC = () => {
   // ==============================
   // 🛒 CART
   // ==============================
-  const addToCart = (item: MenuItem): void => {
+  const addToCart = (item: any) => {
     setCart((prevCart) => [...prevCart, item]);
   };
 
-  const removeFromCart = (index: number): void => {
+  const removeFromCart = (index: number) => {
     setCart((prevCart) => prevCart.filter((_, i) => i !== index));
   };
 
   // ==============================
   // 💳 PAY
   // ==============================
-  const handlePlaceOrder = async (): Promise<void> => {
+  const handlePlaceOrder = async () => {
     if (loading) return;
 
     if (cart.length === 0) {
@@ -94,6 +77,12 @@ const App: React.FC = () => {
 
     if (!phone.trim()) {
       alert("Please enter phone number!");
+      return;
+    }
+
+    // ✅ TERMS CHECK
+    if (!acceptedTerms) {
+      alert("Please accept Terms & Conditions before ordering.");
       return;
     }
 
@@ -121,28 +110,23 @@ const App: React.FC = () => {
       const data = await res.json();
 
       if (!res.ok || !data.checkoutUrl) {
-        console.error("Backend error:", data);
         alert(data.error || "Payment failed");
         setLoading(false);
         return;
       }
 
-      // ✅ SAVE ORDER NUMBER
       if (data.orderNumber) {
         localStorage.setItem("orderNumber", data.orderNumber);
       }
 
-      // ✅ SAVE ORDER ID (fallback)
       if (data.order?.id) {
         localStorage.setItem("orderId", data.order.id.toString());
       }
 
       setCart([]);
-
       window.location.href = data.checkoutUrl;
 
     } catch (error) {
-      console.error("Payment error:", error);
       alert("Payment failed");
       setLoading(false);
     }
@@ -157,15 +141,6 @@ const App: React.FC = () => {
           Blue <span className="text-blue-600">Plate</span> Special
         </h1>
 
-        {/* 📦 TRACK ORDER */}
-        <button
-          onClick={() => navigate("/track")}
-          className="absolute top-6 left-6 bg-blue-600 text-white px-4 py-2 rounded-lg"
-        >
-          Track Order
-        </button>
-
-        {/* 👨‍💼 MANAGER */}
         <button
           onClick={() => navigate("/manager")}
           className="absolute top-6 right-6 bg-black text-white px-4 py-2 rounded-lg"
@@ -173,7 +148,6 @@ const App: React.FC = () => {
           Manager
         </button>
 
-        {/* 🍳 KITCHEN */}
         <button
           onClick={() => navigate("/kitchen-login")}
           className="absolute top-6 right-32 bg-green-600 text-white px-4 py-2 rounded-lg"
@@ -188,7 +162,7 @@ const App: React.FC = () => {
         <div className="flex justify-center mb-10">
           <Input
             value={search}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
             placeholder="Search food..."
           />
         </div>
@@ -201,7 +175,6 @@ const App: React.FC = () => {
               <img
                 src={`${BACKEND_URL}${item.image}`}
                 alt={item.name}
-                onError={(e) => (e.currentTarget.style.display = "none")}
                 className="w-full h-40 object-cover rounded-lg"
               />
 
@@ -226,57 +199,37 @@ const App: React.FC = () => {
         <div className="mt-16 bg-white p-6 rounded-xl shadow-lg max-w-2xl mx-auto border">
           <h2 className="text-2xl font-bold mb-6">Your Cart</h2>
 
-          {cart.length === 0 ? (
-            <p className="text-gray-500 italic">Your cart is empty.</p>
-          ) : (
-            cart.map((item, index) => (
-              <div key={index} className="flex justify-between mb-2">
-                <span>{item.name} - R{item.price}</span>
-                <button onClick={() => removeFromCart(index)}>Remove</button>
-              </div>
-            ))
-          )}
+          {cart.map((item, index) => (
+            <div key={index} className="flex justify-between mb-2">
+              <span>{item.name} - R{item.price}</span>
+              <button onClick={() => removeFromCart(index)}>Remove</button>
+            </div>
+          ))}
 
           <p className="mt-4 font-bold">
             Total: R{cart.reduce((t, i) => t + i.price, 0)}
           </p>
 
-          {/* DELIVERY TYPE */}
-          <div className="mt-6 flex gap-6">
-            <label>
-              <input
-                type="radio"
-                checked={deliveryType === "delivery"}
-                onChange={() => setDeliveryType("delivery")}
-              /> Delivery
-            </label>
+          {/* TERMS & CONDITIONS */}
+          <div className="mt-6 p-4 border rounded bg-gray-50 text-sm">
+            <h3 className="font-bold mb-2">Terms & Conditions</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>No refunds once payment is completed.</li>
+              <li>Please ensure your order is correct before paying.</li>
+              <li>Delivery times may vary during peak hours.</li>
+              <li>Collection orders must be picked up within 30 minutes.</li>
+            </ul>
 
-            <label>
+            <label className="flex items-center mt-4">
               <input
-                type="radio"
-                checked={deliveryType === "collection"}
-                onChange={() => setDeliveryType("collection")}
-              /> Collection
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={() => setAcceptedTerms(!acceptedTerms)}
+                className="mr-2"
+              />
+              I agree to the Terms & Conditions
             </label>
           </div>
-
-          {deliveryType === "delivery" && (
-            <input
-              type="text"
-              placeholder="Address"
-              value={address}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddress(e.target.value)}
-              className="w-full mt-4 p-3 border"
-            />
-          )}
-
-          <input
-            type="text"
-            placeholder="Phone"
-            value={phone}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPhone(e.target.value)}
-            className="w-full mt-4 p-3 border"
-          />
 
           <button
             onClick={handlePlaceOrder}
