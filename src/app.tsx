@@ -57,7 +57,7 @@ const App: React.FC = () => {
   };
 
   // ==============================
-  // 💳 PAY (🔥 FIXED)
+  // 💳 PAY (FINAL FIX)
   // ==============================
   const handlePlaceOrder = async () => {
     if (loading) return;
@@ -83,7 +83,6 @@ const App: React.FC = () => {
     const itemOrdered = cart.map((item) => item.name).join(", ");
 
     try {
-      // ✅ CALL NEW BACKEND ROUTE
       const res = await fetch(`${BACKEND_URL}/api/pay`, {
         method: "POST",
         headers: {
@@ -101,16 +100,18 @@ const App: React.FC = () => {
 
       const data = await res.json();
 
-      if (!data.checkoutUrl) {
-        alert("Payment failed");
+      // 🔥 IMPORTANT FIX
+      if (!res.ok || !data.checkoutUrl) {
+        console.error("Backend error:", data);
+        alert(data.error || "Payment failed");
         setLoading(false);
         return;
       }
 
-      // ✅ CLEAR CART
+      // ✅ clear cart before redirect
       setCart([]);
 
-      // ✅ REDIRECT TO YOCO
+      // ✅ redirect to Yoco
       window.location.href = data.checkoutUrl;
 
     } catch (error) {

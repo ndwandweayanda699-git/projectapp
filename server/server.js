@@ -122,13 +122,12 @@ app.put('/api/admin/menu/:id/toggle', verifyAdmin, async (req, res) => {
 });
 
 // ==============================
-// 💳 CREATE YOCO PAYMENT (🔥 NEW)
+// 💳 CREATE YOCO PAYMENT
 // ==============================
 app.post('/api/pay', async (req, res) => {
   try {
     const { user_id, item_ordered, price } = req.body;
 
-    // 1. Create order
     const result = await pool.query(
       `INSERT INTO orders
       (user_id, item_ordered, price, payment_method, payment_status, delivery_status, created_at)
@@ -139,7 +138,6 @@ app.post('/api/pay', async (req, res) => {
 
     const order = result.rows[0];
 
-    // 2. Create Yoco checkout
     const response = await fetch("https://payments.yoco.com/api/checkouts", {
       method: "POST",
       headers: {
@@ -147,7 +145,7 @@ app.post('/api/pay', async (req, res) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        amount: Math.round(price * 100), // cents
+        amount: Math.round(price * 100),
         currency: "ZAR",
         metadata: {
           order_id: order.id
@@ -182,6 +180,23 @@ app.get('/api/orders', verifyAdmin, async (req, res) => {
     "SELECT * FROM orders ORDER BY id DESC"
   );
   res.json(result.rows);
+});
+
+// ==============================
+// ❌ DELETE ORDER (🔥 NEW)
+// ==============================
+app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
+  try {
+    await pool.query(
+      "DELETE FROM orders WHERE id = $1",
+      [req.params.id]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete error:", err);
+    res.status(500).json({ error: "Failed to delete order" });
+  }
 });
 
 // ==============================
