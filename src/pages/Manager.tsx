@@ -126,24 +126,7 @@ const Manager: React.FC = () => {
   };
 
   // ==============================
-  // 🚚 UPDATE DELIVERY
-  // ==============================
-  const updateDelivery = async (orderId: number, status: string) => {
-    try {
-      await fetch(`${BACKEND_URL}/api/kitchen/orders/${orderId}`, {
-        method: "PUT",
-        headers: getHeaders(),
-        body: JSON.stringify({ status })
-      });
-
-      fetchOrders();
-    } catch {
-      alert("Update failed");
-    }
-  };
-
-  // ==============================
-  // ❌ DELETE ORDER (🔥 NEW)
+  // ❌ DELETE ORDER
   // ==============================
   const deleteOrder = async (orderId: number) => {
     const confirmDelete = window.confirm("Delete this order?");
@@ -155,7 +138,7 @@ const Manager: React.FC = () => {
         headers: getHeaders()
       });
 
-      fetchOrders(); // refresh list
+      fetchOrders();
     } catch (err) {
       console.error("Delete failed:", err);
       alert("Delete failed");
@@ -222,6 +205,8 @@ const Manager: React.FC = () => {
   // ==============================
   // 📊 DASHBOARD
   // ==============================
+  const paidOrders = orders.filter(o => o.payment_status === "paid");
+
   return (
     <div style={{ padding: 30, maxWidth: 900, margin: "0 auto" }}>
 
@@ -274,13 +259,13 @@ const Manager: React.FC = () => {
         ))
       )}
 
-      {/* 📦 ORDERS */}
-      <h2 style={{ marginTop: 30 }}>Orders</h2>
+      {/* 📦 PAID ORDERS ONLY */}
+      <h2 style={{ marginTop: 30 }}>Paid Orders</h2>
 
-      {orders.length === 0 ? (
-        <p>No orders yet</p>
+      {paidOrders.length === 0 ? (
+        <p>No paid orders</p>
       ) : (
-        orders.map(order => (
+        paidOrders.map(order => (
           <div key={order.id} style={{
             background: "white",
             padding: 15,
@@ -291,15 +276,10 @@ const Manager: React.FC = () => {
             <p>{order.item_ordered}</p>
             <p>R{order.price}</p>
 
-            <button onClick={() => updateDelivery(order.id, "delivered")}>
-              Mark Delivered
-            </button>
-
-            {/* 🔥 DELETE BUTTON */}
+            {/* ❌ DELETE */}
             <button
               onClick={() => deleteOrder(order.id)}
               style={{
-                marginLeft: 10,
                 background: "red",
                 color: "white",
                 padding: "6px 12px",
