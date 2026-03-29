@@ -16,6 +16,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const KITCHEN_PASSWORD = process.env.KITCHEN_PASSWORD || "kitchen123";
 const JWT_SECRET = process.env.JWT_SECRET;
 const YOCO_WEBHOOK_SECRET = process.env.YOCO_WEBHOOK_SECRET;
+const YOCO_SECRET_KEY = process.env.YOCO_SECRET_KEY;
 
 if (!YOCO_WEBHOOK_SECRET) {
   console.error("❌ Missing YOCO_WEBHOOK_SECRET");
@@ -35,7 +36,7 @@ app.use((req, res, next) => {
 });
 
 // ==============================
-// 🖼️ SERVE IMAGES (✅ FIXED)
+// 🖼️ SERVE IMAGES
 // ==============================
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
@@ -56,9 +57,7 @@ const verifyAdmin = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.role !== "admin") {
-      return res.status(403).json({ error: "Not admin" });
-    }
+    if (decoded.role !== "admin") return res.status(403).json({ error: "Not admin" });
     next();
   } catch {
     res.status(403).json({ error: "Invalid token" });
@@ -71,9 +70,7 @@ const verifyKitchen = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.role !== "kitchen") {
-      return res.status(403).json({ error: "Not kitchen" });
-    }
+    if (decoded.role !== "kitchen") return res.status(403).json({ error: "Not kitchen" });
     next();
   } catch {
     res.status(403).json({ error: "Invalid token" });
@@ -105,15 +102,10 @@ app.post("/api/kitchen/login", (req, res) => {
 // 🍔 MENU
 // ==============================
 app.get('/api/menu', async (req, res) => {
-  try {
-    const result = await pool.query(
-      "SELECT * FROM menu_items WHERE is_available = TRUE ORDER BY id ASC"
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Menu fetch error:", err);
-    res.status(500).json({ error: "Failed to fetch menu" });
-  }
+  const result = await pool.query(
+    "SELECT * FROM menu_items WHERE is_available = TRUE ORDER BY id ASC"
+  );
+  res.json(result.rows);
 });
 
 app.get('/api/admin/menu', verifyAdmin, async (req, res) => {
@@ -129,32 +121,67 @@ app.put('/api/admin/menu/:id/toggle', verifyAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/admin/menu', verifyAdmin, async (req, res) => {
-  const { name, price, image } = req.body;
+// ==============================
+// 💳 CREATE YOCO PAYMENT (🔥 NEW)
+// ==============================
+app.post('/api/pay', async (req, res) => {
+  try {
+    const { user_id, item_ordered, price } = req.body;
 
-  const result = await pool.query(
-    "INSERT INTO menu_items (name, price, image) VALUES ($1, $2, $3) RETURNING *",
-    [name, price, image]
-  );
+    // 1. Create order
+    const result = await pool.query(
+      `INSERT INTO orders
+      (user_id, item_ordered, price, payment_method, payment_status, delivery_status, created_at)
+      VALUES ($1,$2,$3,'yoco','pending','pending',NOW())
+      RETURNING *`,
+      [user_id, item_ordered, price]
+    );
 
-  res.json(result.rows[0]);
+    const order = result.rows[0];
+
+    // 2. Create Yoco checkout
+    const response = await fetch("https://payments.yoco.com/api/checkouts", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${YOCO_SECRET_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        amount: Math.round(price * 100), // cents
+        currency: "ZAR",
+        metadata: {
+          order_id: order.id
+        },
+        successUrl: `https://projectapp-sk4p.onrender.com/success?order_id=${order.id}`,
+        cancelUrl: `https://projectapp-sk4p.onrender.com/success?order_id=${order.id}`
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data.redirectUrl) {
+      return res.status(500).json({ error: "Yoco failed" });
+    }
+
+    res.json({
+      order,
+      checkoutUrl: data.redirectUrl
+    });
+
+  } catch (err) {
+    console.error("Payment error:", err);
+    res.status(500).json({ error: "Payment failed" });
+  }
 });
 
 // ==============================
-// 🟢 CREATE ORDER
+// 📦 FETCH ORDERS
 // ==============================
-app.post('/api/orders', async (req, res) => {
-  const { user_id, item_ordered, price, payment_method } = req.body;
-
+app.get('/api/orders', verifyAdmin, async (req, res) => {
   const result = await pool.query(
-    `INSERT INTO orders
-    (user_id, item_ordered, price, payment_method, payment_status, delivery_status, created_at)
-    VALUES ($1,$2,$3,$4,'pending','pending',NOW())
-    RETURNING *`,
-    [user_id, item_ordered, price, payment_method]
+    "SELECT * FROM orders ORDER BY id DESC"
   );
-
-  res.json({ order: result.rows[0] });
+  res.json(result.rows);
 });
 
 // ==============================
@@ -169,7 +196,10 @@ app.post('/webhook/yoco', async (req, res) => {
       .update(req.body)
       .digest('hex');
 
-    if (signature !== expectedSignature) return res.sendStatus(400);
+    if (signature !== expectedSignature) {
+      console.log("❌ Invalid webhook signature");
+      return res.sendStatus(400);
+    }
 
     const event = JSON.parse(req.body.toString());
 
@@ -180,11 +210,14 @@ app.post('/webhook/yoco', async (req, res) => {
         `UPDATE orders SET payment_status='paid' WHERE id=$1`,
         [orderId]
       );
+
+      console.log(`✅ Order ${orderId} PAID`);
     }
 
     res.sendStatus(200);
 
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.sendStatus(500);
   }
 });
@@ -196,7 +229,6 @@ app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
   const result = await pool.query(
     `SELECT * FROM orders
      WHERE payment_status='paid'
-     AND delivery_status != 'ready'
      ORDER BY id ASC`
   );
   res.json(result.rows);

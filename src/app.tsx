@@ -15,13 +15,14 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [deliveryType, setDeliveryType] = useState<"delivery" | "collection">("delivery");
 
-  // ✅ FETCH MENU
+  // ==============================
+  // 🍔 FETCH MENU
+  // ==============================
   const fetchMenu = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/menu`);
       const data = await res.json();
 
-      // 🔥 Ensure price is always a number
       const cleanData = data.map((item: any) => ({
         ...item,
         price: Number(item.price)
@@ -37,12 +38,16 @@ const App: React.FC = () => {
     fetchMenu();
   }, []);
 
-  // ✅ SEARCH
+  // ==============================
+  // 🔍 SEARCH
+  // ==============================
   const filteredItems = menu.filter((item) =>
     item.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // ✅ ADD TO CART (safe)
+  // ==============================
+  // 🛒 CART
+  // ==============================
   const addToCart = (item: any) => {
     setCart((prevCart) => [...prevCart, item]);
   };
@@ -51,6 +56,9 @@ const App: React.FC = () => {
     setCart((prevCart) => prevCart.filter((_, i) => i !== index));
   };
 
+  // ==============================
+  // 💳 PAY (🔥 FIXED)
+  // ==============================
   const handlePlaceOrder = async () => {
     if (loading) return;
 
@@ -72,12 +80,11 @@ const App: React.FC = () => {
     setLoading(true);
 
     const totalAmount = cart.reduce((sum, item) => sum + item.price, 0);
-
-    const orderRef = "Order-" + Date.now();
     const itemOrdered = cart.map((item) => item.name).join(", ");
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/orders`, {
+      // ✅ CALL NEW BACKEND ROUTE
+      const res = await fetch(`${BACKEND_URL}/api/pay`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -86,37 +93,29 @@ const App: React.FC = () => {
           user_id: 1,
           item_ordered: itemOrdered,
           price: totalAmount,
-          payment_method: "yoco",
           address: deliveryType === "delivery" ? address : "COLLECTION",
           phone: phone,
           delivery_type: deliveryType
         })
       });
 
-      const data = await response.json();
-      const orderId = data?.order?.id;
+      const data = await res.json();
 
-      if (!orderId) {
-        alert("Order failed");
+      if (!data.checkoutUrl) {
+        alert("Payment failed");
         setLoading(false);
         return;
       }
 
-      const successUrl = `https://projectapp-sk4p.onrender.com/success?order_id=${orderId}`;
-
-      const paymentUrl = new URL(`https://pay.yoco.com/sizakala`);
-      paymentUrl.searchParams.append("amount", totalAmount.toString());
-      paymentUrl.searchParams.append("reference", orderRef);
-      paymentUrl.searchParams.append("metadata[order_id]", orderId.toString());
-      paymentUrl.searchParams.append("successUrl", successUrl);
-      paymentUrl.searchParams.append("cancelUrl", successUrl);
-
+      // ✅ CLEAR CART
       setCart([]);
-      window.location.href = paymentUrl.toString();
+
+      // ✅ REDIRECT TO YOCO
+      window.location.href = data.checkoutUrl;
 
     } catch (error) {
-      console.error("Order failed:", error);
-      alert("Order failed");
+      console.error("Payment error:", error);
+      alert("Payment failed");
       setLoading(false);
     }
   };
@@ -161,7 +160,6 @@ const App: React.FC = () => {
           {filteredItems.map((item) => (
             <div key={item.id} className="bg-white p-4 rounded-xl shadow">
 
-              {/* ✅ FIXED IMAGE */}
               <img
                 src={`${BACKEND_URL}${item.image}`}
                 alt={item.name}
