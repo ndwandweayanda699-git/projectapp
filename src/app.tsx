@@ -57,7 +57,7 @@ const App: React.FC = () => {
   };
 
   // ==============================
-  // 💳 PAY (FINAL FIX)
+  // 💳 PAY (FINAL)
   // ==============================
   const handlePlaceOrder = async () => {
     if (loading) return;
@@ -100,7 +100,6 @@ const App: React.FC = () => {
 
       const data = await res.json();
 
-      // 🔥 IMPORTANT FIX
       if (!res.ok || !data.checkoutUrl) {
         console.error("Backend error:", data);
         alert(data.error || "Payment failed");
@@ -108,10 +107,10 @@ const App: React.FC = () => {
         return;
       }
 
-      // ✅ clear cart before redirect
+      // ✅ clear cart BEFORE redirect
       setCart([]);
 
-      // ✅ redirect to Yoco
+      // ✅ redirect to Yoco payment page
       window.location.href = data.checkoutUrl;
 
     } catch (error) {

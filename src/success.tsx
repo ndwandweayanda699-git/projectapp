@@ -1,46 +1,46 @@
 import React, { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
-export default function Success() {
+const Success: React.FC = () => {
+  const navigate = useNavigate();
+
+  const params = new URLSearchParams(window.location.search);
+  const orderId = params.get("order_id");
 
   useEffect(() => {
+    // ⏳ Auto redirect after 3 seconds
+    const timer = setTimeout(() => {
+      navigate("/");
+    }, 3000);
 
-    const params = new URLSearchParams(window.location.search);
-    const orderId = params.get("order_id");
-
-    if (!orderId) {
-      console.error("No order_id found in URL");
-      return;
-    }
-
-    fetch("https://projectapp-backend-u0fx.onrender.com/api/confirm-payment", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        order_id: Number(orderId)
-      })
-    })
-    .then(async (res) => {
-      if (!res.ok) {
-        throw new Error("Failed to confirm payment");
-      }
-      return res.json();
-    })
-    .then((data) => {
-      console.log("Payment confirmed:", data);
-    })
-    .catch((err) => {
-      console.error("Payment confirmation error:", err);
-    });
-
-  }, []);
+    return () => clearTimeout(timer);
+  }, [navigate]);
 
   return (
-    <div style={{ textAlign: "center", marginTop: "100px" }}>
+    <div style={{ textAlign: "center", marginTop: 100 }}>
       <h1>✅ Payment Successful</h1>
-      <p>Your order has been confirmed.</p>
+
+      <p>
+        Your order <strong>#{orderId}</strong> has been received.
+      </p>
+
+      <p>Preparing your food 🍔...</p>
+      <p>Redirecting to menu...</p>
+
+      <button
+        onClick={() => navigate("/")}
+        style={{
+          marginTop: 20,
+          padding: "10px 20px",
+          background: "green",
+          color: "white",
+          borderRadius: 6
+        }}
+      >
+        Back to Menu
+      </button>
     </div>
   );
+};
 
-}
+export default Success;g
