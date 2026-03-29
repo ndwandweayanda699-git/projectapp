@@ -32,7 +32,6 @@ const App: React.FC = () => {
   const [phone, setPhone] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [deliveryType, setDeliveryType] = useState<"delivery" | "collection">("delivery");
-
   const [agreeTerms, setAgreeTerms] = useState<boolean>(false);
 
   // ==============================
@@ -79,7 +78,7 @@ const App: React.FC = () => {
   };
 
   // ==============================
-  // 💳 PAY (FIXED)
+  // 💳 PAY (UPDATED FOR MULTI-ORDER)
   // ==============================
   const handlePlaceOrder = async (): Promise<void> => {
     if (loading) return;
@@ -125,7 +124,6 @@ const App: React.FC = () => {
         })
       });
 
-      // 🔥 SAFE JSON PARSE
       let data: any;
       try {
         data = await res.json();
@@ -133,32 +131,40 @@ const App: React.FC = () => {
         throw new Error("Invalid server response");
       }
 
-      console.log("🧾 ORDER RESPONSE:", data);
-
       if (!res.ok || !data.checkoutUrl) {
         alert(data?.error || "Payment failed");
         setLoading(false);
         return;
       }
 
-      // ✅ FORCE SAVE ORDER NUMBER
+      // ==============================
+      // ✅ SAVE MULTIPLE ORDERS
+      // ==============================
       const orderNumber = data.orderNumber || data.order?.order_number;
 
       if (orderNumber) {
+        const existingOrders = JSON.parse(localStorage.getItem("orders") || "[]");
+
+        // add newest first
+        existingOrders.unshift(orderNumber);
+
+        // limit (optional)
+        const limitedOrders = existingOrders.slice(0, 10);
+
+        localStorage.setItem("orders", JSON.stringify(limitedOrders));
+
+        // still save latest for quick access
         localStorage.setItem("orderNumber", orderNumber);
-        console.log("✅ Saved orderNumber:", orderNumber);
-      } else {
-        console.warn("⚠️ No orderNumber returned!");
+
+        console.log("✅ Orders saved:", limitedOrders);
       }
 
-      // ✅ SAVE ORDER ID
       if (data.order?.id) {
         localStorage.setItem("orderId", data.order.id.toString());
       }
 
       setCart([]);
 
-      // 🔥 SMALL DELAY ENSURES STORAGE SAVED
       setTimeout(() => {
         window.location.href = data.checkoutUrl;
       }, 300);
@@ -168,6 +174,21 @@ const App: React.FC = () => {
       alert("Payment failed");
       setLoading(false);
     }
+  };
+
+  // ==============================
+  // ✅ TRACK BUTTON (UPDATED)
+  // ==============================
+  const handleTrackOrder = () => {
+    const orders = JSON.parse(localStorage.getItem("orders") || "[]");
+
+    if (orders.length === 0) {
+      alert("No orders found. Please place an order first.");
+      return;
+    }
+
+    // go to track page (it will handle list)
+    navigate("/track");
   };
 
   return (
@@ -180,7 +201,7 @@ const App: React.FC = () => {
         </h1>
 
         <button
-          onClick={() => navigate("/track")}
+          onClick={handleTrackOrder}
           className="absolute top-6 left-6 bg-blue-600 text-white px-4 py-2 rounded-lg"
         >
           Track Order
@@ -259,61 +280,6 @@ const App: React.FC = () => {
           <p className="mt-4 font-bold">
             Total: R{cart.reduce((t, i) => t + i.price, 0)}
           </p>
-
-          <div className="mt-6 flex gap-6">
-            <label>
-              <input
-                type="radio"
-                checked={deliveryType === "delivery"}
-                onChange={() => setDeliveryType("delivery")}
-              /> Delivery
-            </label>
-
-            <label>
-              <input
-                type="radio"
-                checked={deliveryType === "collection"}
-                onChange={() => setDeliveryType("collection")}
-              /> Collection
-            </label>
-          </div>
-
-          {deliveryType === "delivery" && (
-            <input
-              type="text"
-              placeholder="Address"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              className="w-full mt-4 p-3 border"
-            />
-          )}
-
-          <input
-            type="text"
-            placeholder="Phone"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full mt-4 p-3 border"
-          />
-
-          <div className="mt-6 border p-4 rounded-lg bg-gray-50">
-            <h3 className="font-bold mb-2">Terms & Conditions</h3>
-            <ul className="text-sm list-disc ml-5 space-y-1">
-              <li>No refunds once payment is completed.</li>
-              <li>Please ensure your order details are correct before paying.</li>
-              <li>Delivery times may vary depending on demand.</li>
-              <li>Collection orders must be picked up within 30 minutes.</li>
-            </ul>
-
-            <label className="flex items-center gap-2 mt-3">
-              <input
-                type="checkbox"
-                checked={agreeTerms}
-                onChange={(e) => setAgreeTerms(e.target.checked)}
-              />
-              I agree to the Terms & Conditions
-            </label>
-          </div>
 
           <button
             onClick={handlePlaceOrder}
