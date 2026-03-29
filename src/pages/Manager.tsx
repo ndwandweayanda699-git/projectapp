@@ -9,10 +9,13 @@ const Manager: React.FC = () => {
   const [loggedIn, setLoggedIn] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const getHeaders = () => ({
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${localStorage.getItem("token")}`
-  });
+  const getHeaders = () => {
+    const token = localStorage.getItem("token");
+    return {
+      "Content-Type": "application/json",
+      "Authorization": token ? `Bearer ${token}` : ""
+    };
+  };
 
   // ==============================
   // 🔐 LOGIN / LOGOUT
@@ -48,7 +51,7 @@ const Manager: React.FC = () => {
   };
 
   // ==============================
-  // 📥 FETCH ORDERS (FIXED 🔥)
+  // 📥 FETCH ORDERS
   // ==============================
   const fetchOrders = useCallback(async () => {
     const token = localStorage.getItem("token");
@@ -57,17 +60,19 @@ const Manager: React.FC = () => {
     try {
       setIsRefreshing(true);
 
-      const res = await fetch(`${BACKEND_URL}/api/kitchen/orders`, {
+      const res = await fetch(`${BACKEND_URL}/api/orders`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (!res.ok) {
-        console.error("Orders fetch failed:", res.status);
-        return;
+      const data = await res.json();
+
+      if (res.ok) {
+        setOrders(Array.isArray(data) ? data : []);
+      } else {
+        console.error("Orders fetch failed:", data);
+        setOrders([]);
       }
 
-      const data = await res.json();
-      setOrders(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -76,7 +81,7 @@ const Manager: React.FC = () => {
   }, []);
 
   // ==============================
-  // 🍔 FETCH MENU
+  // 🍔 FETCH MENU (FIXED 🔥)
   // ==============================
   const fetchMenu = async () => {
     try {
@@ -84,15 +89,26 @@ const Manager: React.FC = () => {
         headers: getHeaders()
       });
 
-      if (!res.ok) {
-        console.error("Menu fetch failed:", res.status);
-        return;
+      const data = await res.json();
+
+      console.log("MENU RESPONSE:", data); // 🔍 DEBUG
+
+      if (res.ok) {
+        setMenu(Array.isArray(data) ? data : []);
+      } else {
+        console.error("Menu fetch failed:", data);
+
+        // 🔥 TOKEN EXPIRED → FORCE LOGOUT
+        if (data?.error === "Invalid token" || data?.error === "No token") {
+          handleLogout();
+        }
+
+        setMenu([]);
       }
 
-      const data = await res.json();
-      setMenu(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Menu fetch error", err);
+      setMenu([]);
     }
   };
 
@@ -101,19 +117,31 @@ const Manager: React.FC = () => {
   // ==============================
   const toggleItem = async (id: number) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/menu/${id}/toggle`, {
+      await fetch(`${BACKEND_URL}/api/admin/menu/${id}/toggle`, {
         method: "PUT",
         headers: getHeaders()
       });
 
-      if (!res.ok) {
-        alert("Toggle failed");
-        return;
-      }
-
       fetchMenu();
     } catch {
       alert("Toggle failed");
+    }
+  };
+
+  // ==============================
+  // 🚚 UPDATE DELIVERY
+  // ==============================
+  const updateDelivery = async (orderId: number, status: string) => {
+    try {
+      await fetch(`${BACKEND_URL}/api/kitchen/orders/${orderId}`, {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify({ status })
+      });
+
+      fetchOrders();
+    } catch {
+      alert("Update failed");
     }
   };
 
@@ -136,12 +164,14 @@ const Manager: React.FC = () => {
       fetchMenu();
     }
 
-    const interval = setInterval(() => {
-      if (localStorage.getItem("token")) {
+    let interval: any;
+
+    if (token) {
+      interval = setInterval(() => {
         fetchOrders();
         fetchMenu();
-      }
-    }, 5000);
+      }, 5000);
+    }
 
     return () => clearInterval(interval);
   }, [fetchOrders]);
@@ -196,53 +226,60 @@ const Manager: React.FC = () => {
       {/* 🍔 MENU CONTROL */}
       <h2 style={{ marginTop: 30 }}>🍔 Menu Control</h2>
 
-      {menu.length === 0 && <p>No menu items found</p>}
+      {menu.length === 0 ? (
+        <p>No menu items found</p>
+      ) : (
+        menu.map(item => (
+          <div key={item.id} style={{
+            background: "white",
+            padding: 15,
+            marginBottom: 10,
+            borderRadius: 8,
+            display: "flex",
+            justifyContent: "space-between"
+          }}>
+            <div>
+              <strong>{item.name}</strong> - R{item.price}
+            </div>
 
-      {menu.map(item => (
-        <div key={item.id} style={{
-          background: "white",
-          padding: 15,
-          marginBottom: 10,
-          borderRadius: 8,
-          display: "flex",
-          justifyContent: "space-between"
-        }}>
-          <div>
-            <strong>{item.name}</strong> - R{item.price}
+            <button
+              onClick={() => toggleItem(item.id)}
+              style={{
+                background: item.is_available ? "green" : "red",
+                color: "white",
+                padding: "6px 12px",
+                borderRadius: 6
+              }}
+            >
+              {item.is_available ? "Available" : "Out of Stock"}
+            </button>
           </div>
-
-          <button
-            onClick={() => toggleItem(item.id)}
-            style={{
-              background: item.is_available ? "green" : "red",
-              color: "white",
-              padding: "6px 12px",
-              borderRadius: 6
-            }}
-          >
-            {item.is_available ? "Available" : "Out of Stock"}
-          </button>
-        </div>
-      ))}
+        ))
+      )}
 
       {/* 📦 ORDERS */}
       <h2 style={{ marginTop: 30 }}>Orders</h2>
 
-      {orders.length === 0 && <p>No orders yet</p>}
+      {orders.length === 0 ? (
+        <p>No orders yet</p>
+      ) : (
+        orders.map(order => (
+          <div key={order.id} style={{
+            background: "white",
+            padding: 15,
+            marginBottom: 10,
+            borderRadius: 8
+          }}>
+            <strong>Order #{order.id}</strong>
+            <p>{order.item_ordered}</p>
+            <p>R{order.price}</p>
 
-      {orders.map(order => (
-        <div key={order.id} style={{
-          background: "white",
-          padding: 15,
-          marginBottom: 10,
-          borderRadius: 8
-        }}>
-          <strong>Order #{order.id}</strong>
-          <p>{order.item_ordered}</p>
-          <p>R{order.price}</p>
-          <p>Status: {order.payment_status}</p>
-        </div>
-      ))}
+            <button onClick={() => updateDelivery(order.id, "delivered")}>
+              Mark Delivered
+            </button>
+          </div>
+        ))
+      )}
 
     </div>
   );
