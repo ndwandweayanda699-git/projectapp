@@ -9,11 +9,14 @@ const Manager: React.FC = () => {
   const [loggedIn, setLoggedIn] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // ✅ FIX: consistent token handling
+  const getToken = () => localStorage.getItem("admin_token");
+
   const getHeaders = () => {
-    const token = localStorage.getItem("token");
+    const token = getToken();
     return {
       "Content-Type": "application/json",
-      "Authorization": token ? `Bearer ${token}` : ""
+      Authorization: token ? `Bearer ${token}` : "",
     };
   };
 
@@ -21,7 +24,7 @@ const Manager: React.FC = () => {
   // 🔐 LOGIN / LOGOUT
   // ==============================
   const handleLogout = () => {
-    localStorage.removeItem("token");
+    localStorage.removeItem("admin_token");
     setLoggedIn(false);
     setOrders([]);
     setMenu([]);
@@ -32,13 +35,14 @@ const Manager: React.FC = () => {
       const res = await fetch(`${BACKEND_URL}/api/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password })
+        body: JSON.stringify({ password }),
       });
 
       const data = await res.json();
 
       if (res.ok) {
-        localStorage.setItem("token", data.token);
+        // ✅ FIX: correct key
+        localStorage.setItem("admin_token", data.token);
         setLoggedIn(true);
         fetchOrders();
         fetchMenu();
@@ -54,14 +58,14 @@ const Manager: React.FC = () => {
   // 📥 FETCH ORDERS
   // ==============================
   const fetchOrders = useCallback(async () => {
-    const token = localStorage.getItem("token");
+    const token = getToken();
     if (!token) return;
 
     try {
       setIsRefreshing(true);
 
       const res = await fetch(`${BACKEND_URL}/api/orders`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       const data = await res.json();
@@ -70,9 +74,11 @@ const Manager: React.FC = () => {
         setOrders(Array.isArray(data) ? data : []);
       } else {
         console.error("Orders fetch failed:", data);
+        if (data?.error === "Invalid token" || data?.error === "No token") {
+          handleLogout();
+        }
         setOrders([]);
       }
-
     } catch (err) {
       console.error(err);
     } finally {
@@ -83,10 +89,10 @@ const Manager: React.FC = () => {
   // ==============================
   // 🍔 FETCH MENU
   // ==============================
-  const fetchMenu = async () => {
+  const fetchMenu = useCallback(async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/admin/menu`, {
-        headers: getHeaders()
+        headers: getHeaders(),
       });
 
       const data = await res.json();
@@ -102,25 +108,34 @@ const Manager: React.FC = () => {
 
         setMenu([]);
       }
-
     } catch (err) {
       console.error("Menu fetch error", err);
       setMenu([]);
     }
-  };
+  }, []);
 
   // ==============================
-  // 🔄 TOGGLE MENU ITEM
+  // 🔄 TOGGLE MENU ITEM (🔥 FIXED)
   // ==============================
   const toggleItem = async (id: number) => {
     try {
-      await fetch(`${BACKEND_URL}/api/admin/menu/${id}/toggle`, {
+      const res = await fetch(`${BACKEND_URL}/api/admin/menu/${id}/toggle`, {
         method: "PUT",
-        headers: getHeaders()
+        headers: getHeaders(),
       });
 
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("Toggle failed:", data);
+        alert(data.error || "Toggle failed");
+        return;
+      }
+
+      // ✅ refresh UI
       fetchMenu();
-    } catch {
+    } catch (err) {
+      console.error("Toggle error:", err);
       alert("Toggle failed");
     }
   };
@@ -133,10 +148,15 @@ const Manager: React.FC = () => {
     if (!confirmDelete) return;
 
     try {
-      await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
+      const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
         method: "DELETE",
-        headers: getHeaders()
+        headers: getHeaders(),
       });
+
+      if (!res.ok) {
+        alert("Delete failed");
+        return;
+      }
 
       fetchOrders();
     } catch (err) {
@@ -149,14 +169,14 @@ const Manager: React.FC = () => {
   // 💰 REVENUE
   // ==============================
   const totalPaidRevenue = orders
-    .filter(o => o.payment_status === "paid")
+    .filter((o) => o.payment_status === "paid")
     .reduce((sum, o) => sum + parseFloat(o.price || 0), 0);
 
   // ==============================
   // 🔄 AUTO LOAD
   // ==============================
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getToken();
 
     if (token) {
       setLoggedIn(true);
@@ -164,17 +184,13 @@ const Manager: React.FC = () => {
       fetchMenu();
     }
 
-    let interval: any;
-
-    if (token) {
-      interval = setInterval(() => {
-        fetchOrders();
-        fetchMenu();
-      }, 5000);
-    }
+    const interval = setInterval(() => {
+      fetchOrders();
+      fetchMenu();
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [fetchOrders]);
+  }, [fetchOrders, fetchMenu]);
 
   // ==============================
   // 🔒 LOGIN SCREEN
@@ -205,23 +221,24 @@ const Manager: React.FC = () => {
   // ==============================
   // 📊 DASHBOARD
   // ==============================
-  const paidOrders = orders.filter(o => o.payment_status === "paid");
+  const paidOrders = orders.filter((o) => o.payment_status === "paid");
 
   return (
     <div style={{ padding: 30, maxWidth: 900, margin: "0 auto" }}>
-
       <h1>📊 Manager Dashboard</h1>
 
       <button onClick={handleLogout}>Logout</button>
 
       {/* 💰 REVENUE */}
-      <div style={{
-        background: "green",
-        color: "white",
-        padding: 20,
-        borderRadius: 10,
-        marginTop: 20
-      }}>
+      <div
+        style={{
+          background: "green",
+          color: "white",
+          padding: 20,
+          borderRadius: 10,
+          marginTop: 20,
+        }}
+      >
         <h2>Revenue: R{totalPaidRevenue.toFixed(2)}</h2>
       </div>
 
@@ -231,15 +248,18 @@ const Manager: React.FC = () => {
       {menu.length === 0 ? (
         <p>No menu items found</p>
       ) : (
-        menu.map(item => (
-          <div key={item.id} style={{
-            background: "white",
-            padding: 15,
-            marginBottom: 10,
-            borderRadius: 8,
-            display: "flex",
-            justifyContent: "space-between"
-          }}>
+        menu.map((item) => (
+          <div
+            key={item.id}
+            style={{
+              background: "white",
+              padding: 15,
+              marginBottom: 10,
+              borderRadius: 8,
+              display: "flex",
+              justifyContent: "space-between",
+            }}
+          >
             <div>
               <strong>{item.name}</strong> - R{item.price}
             </div>
@@ -250,7 +270,7 @@ const Manager: React.FC = () => {
                 background: item.is_available ? "green" : "red",
                 color: "white",
                 padding: "6px 12px",
-                borderRadius: 6
+                borderRadius: 6,
               }}
             >
               {item.is_available ? "Available" : "Out of Stock"}
@@ -259,31 +279,33 @@ const Manager: React.FC = () => {
         ))
       )}
 
-      {/* 📦 PAID ORDERS ONLY */}
+      {/* 📦 PAID ORDERS */}
       <h2 style={{ marginTop: 30 }}>Paid Orders</h2>
 
       {paidOrders.length === 0 ? (
         <p>No paid orders</p>
       ) : (
-        paidOrders.map(order => (
-          <div key={order.id} style={{
-            background: "white",
-            padding: 15,
-            marginBottom: 10,
-            borderRadius: 8
-          }}>
+        paidOrders.map((order) => (
+          <div
+            key={order.id}
+            style={{
+              background: "white",
+              padding: 15,
+              marginBottom: 10,
+              borderRadius: 8,
+            }}
+          >
             <strong>Order #{order.id}</strong>
             <p>{order.item_ordered}</p>
             <p>R{order.price}</p>
 
-            {/* ❌ DELETE */}
             <button
               onClick={() => deleteOrder(order.id)}
               style={{
                 background: "red",
                 color: "white",
                 padding: "6px 12px",
-                borderRadius: 6
+                borderRadius: 6,
               }}
             >
               Delete
@@ -291,7 +313,6 @@ const Manager: React.FC = () => {
           </div>
         ))
       )}
-
     </div>
   );
 };
