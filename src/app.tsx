@@ -2,30 +2,50 @@ import React, { useEffect, useState } from 'react';
 import Input from './components/ui/input';
 import { useNavigate } from "react-router-dom";
 
+// ==============================
+// 🔧 TYPES (TS)
+// ==============================
+type MenuItem = {
+  id: number;
+  name: string;
+  price: number;
+  image: string;
+};
+
+type CartItem = MenuItem;
+
+// ==============================
+// 🔗 CONFIG
+// ==============================
 const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
 
 const App: React.FC = () => {
   const navigate = useNavigate();
 
-  const [search, setSearch] = useState("");
-  const [menu, setMenu] = useState<any[]>([]);
-  const [cart, setCart] = useState<any[]>([]);
-  const [address, setAddress] = useState("");
-  const [phone, setPhone] = useState("");
-  const [loading, setLoading] = useState(false);
+  // ==============================
+  // 🧠 STATE
+  // ==============================
+  const [search, setSearch] = useState<string>("");
+  const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [address, setAddress] = useState<string>("");
+  const [phone, setPhone] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
   const [deliveryType, setDeliveryType] = useState<"delivery" | "collection">("delivery");
 
   // ==============================
   // 🍔 FETCH MENU
   // ==============================
-  const fetchMenu = async () => {
+  const fetchMenu = async (): Promise<void> => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/menu`);
       const data = await res.json();
 
-      const cleanData = data.map((item: any) => ({
-        ...item,
-        price: Number(item.price)
+      const cleanData: MenuItem[] = data.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        price: Number(item.price),
+        image: item.image
       }));
 
       setMenu(cleanData);
@@ -48,18 +68,18 @@ const App: React.FC = () => {
   // ==============================
   // 🛒 CART
   // ==============================
-  const addToCart = (item: any) => {
+  const addToCart = (item: MenuItem): void => {
     setCart((prevCart) => [...prevCart, item]);
   };
 
-  const removeFromCart = (index: number) => {
+  const removeFromCart = (index: number): void => {
     setCart((prevCart) => prevCart.filter((_, i) => i !== index));
   };
 
   // ==============================
   // 💳 PAY
   // ==============================
-  const handlePlaceOrder = async () => {
+  const handlePlaceOrder = async (): Promise<void> => {
     if (loading) return;
 
     if (cart.length === 0) {
@@ -137,7 +157,7 @@ const App: React.FC = () => {
           Blue <span className="text-blue-600">Plate</span> Special
         </h1>
 
-        {/* ✅ STEP 9 TRACK BUTTON */}
+        {/* 📦 TRACK ORDER */}
         <button
           onClick={() => navigate("/track")}
           className="absolute top-6 left-6 bg-blue-600 text-white px-4 py-2 rounded-lg"
@@ -145,6 +165,7 @@ const App: React.FC = () => {
           Track Order
         </button>
 
+        {/* 👨‍💼 MANAGER */}
         <button
           onClick={() => navigate("/manager")}
           className="absolute top-6 right-6 bg-black text-white px-4 py-2 rounded-lg"
@@ -152,6 +173,7 @@ const App: React.FC = () => {
           Manager
         </button>
 
+        {/* 🍳 KITCHEN */}
         <button
           onClick={() => navigate("/kitchen-login")}
           className="absolute top-6 right-32 bg-green-600 text-white px-4 py-2 rounded-lg"
@@ -166,7 +188,7 @@ const App: React.FC = () => {
         <div className="flex justify-center mb-10">
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
             placeholder="Search food..."
           />
         </div>
@@ -243,7 +265,7 @@ const App: React.FC = () => {
               type="text"
               placeholder="Address"
               value={address}
-              onChange={(e) => setAddress(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddress(e.target.value)}
               className="w-full mt-4 p-3 border"
             />
           )}
@@ -252,7 +274,7 @@ const App: React.FC = () => {
             type="text"
             placeholder="Phone"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPhone(e.target.value)}
             className="w-full mt-4 p-3 border"
           />
 
