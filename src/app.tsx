@@ -34,6 +34,9 @@ const App: React.FC = () => {
   const [deliveryType, setDeliveryType] = useState<"delivery" | "collection">("delivery");
   const [agreeTerms, setAgreeTerms] = useState<boolean>(false);
 
+  // ✅ NEW POPUP STATE
+  const [message, setMessage] = useState<string>("");
+
   // ==============================
   // 🍔 FETCH MENU
   // ==============================
@@ -84,22 +87,22 @@ const App: React.FC = () => {
     if (loading) return;
 
     if (cart.length === 0) {
-      alert("Your cart is empty!");
+      setMessage("Your cart is empty!");
       return;
     }
 
     if (deliveryType === "delivery" && !address.trim()) {
-      alert("Please enter delivery address!");
+      setMessage("Please enter delivery address!");
       return;
     }
 
     if (!phone.trim()) {
-      alert("Please enter phone number!");
+      setMessage("Please enter phone number!");
       return;
     }
 
     if (!agreeTerms) {
-      alert("You must agree to Terms & Conditions");
+      setMessage("You must agree to Terms & Conditions");
       return;
     }
 
@@ -132,26 +135,18 @@ const App: React.FC = () => {
       }
 
       if (!res.ok || !data.checkoutUrl) {
-        alert(data?.error || "Payment failed");
+        setMessage(data?.error || "Payment failed");
         setLoading(false);
         return;
       }
 
-      // ==============================
-      // ✅ SAVE MULTIPLE ORDERS
-      // ==============================
       const orderNumber = data.orderNumber || data.order?.order_number;
 
       if (orderNumber) {
         const existingOrders = JSON.parse(localStorage.getItem("orders") || "[]");
-
         existingOrders.unshift(orderNumber);
-
         const limitedOrders = existingOrders.slice(0, 10);
-
         localStorage.setItem("orders", JSON.stringify(limitedOrders));
-
-        // latest quick access
         localStorage.setItem("orderNumber", orderNumber);
       }
 
@@ -167,7 +162,7 @@ const App: React.FC = () => {
 
     } catch (error) {
       console.error("Payment error:", error);
-      alert("Payment failed");
+      setMessage("Payment failed");
       setLoading(false);
     }
   };
@@ -179,7 +174,7 @@ const App: React.FC = () => {
     const orders = JSON.parse(localStorage.getItem("orders") || "[]");
 
     if (orders.length === 0) {
-      alert("No orders found. Please place an order first.");
+      setMessage("No orders found. Please place an order first.");
       return;
     }
 
@@ -188,6 +183,21 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+
+      {/* ✅ POPUP UI */}
+      {message && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl shadow-lg text-center max-w-sm w-full">
+            <p className="mb-4">{message}</p>
+            <button
+              onClick={() => setMessage("")}
+              className="bg-blue-600 text-white px-4 py-2 rounded"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* HEADER */}
       <header className="py-16 px-4 text-center bg-white border-b shadow-sm mb-10 relative">
