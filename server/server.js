@@ -113,7 +113,6 @@ app.get('/api/admin/menu', verifyAdmin, async (req, res) => {
   res.json(result.rows);
 });
 
-// ✅ FIXED: Toggle must return JSON (IMPORTANT)
 app.put('/api/admin/menu/:id/toggle', verifyAdmin, async (req, res) => {
   try {
     await pool.query(
@@ -121,7 +120,7 @@ app.put('/api/admin/menu/:id/toggle', verifyAdmin, async (req, res) => {
       [req.params.id]
     );
 
-    res.json({ success: true }); // 🔥 REQUIRED (fixes your error)
+    res.json({ success: true });
 
   } catch (err) {
     console.error("Toggle error:", err);
@@ -130,20 +129,20 @@ app.put('/api/admin/menu/:id/toggle', verifyAdmin, async (req, res) => {
 });
 
 // ==============================
-// 💳 CREATE PAYMENT
+// 💳 CREATE PAYMENT (FIXED)
 // ==============================
 app.post('/api/pay', async (req, res) => {
   try {
-    const { user_id, item_ordered, price } = req.body;
+    const { user_id, item_ordered, price, address, phone, delivery_type } = req.body;
 
     const orderNumber = "BP" + Date.now();
 
     const result = await pool.query(
       `INSERT INTO orders
-      (order_number, user_id, item_ordered, price, payment_method, payment_status, status, delivery_status, created_at)
-      VALUES ($1,$2,$3,$4,'yoco','pending','pending','pending',NOW())
+      (order_number, user_id, item_ordered, price, address, phone, delivery_type, payment_method, payment_status, status, delivery_status, created_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,'yoco','pending','pending','pending',NOW())
       RETURNING *`,
-      [orderNumber, user_id, item_ordered, price]
+      [orderNumber, user_id, item_ordered, price, address, phone, delivery_type]
     );
 
     const order = result.rows[0];
@@ -234,10 +233,12 @@ app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
 });
 
 // ==============================
-// 💳 YOCO WEBHOOK
+// 💳 YOCO WEBHOOK (DEBUG + SAFE)
 // ==============================
 app.post('/webhook/yoco', async (req, res) => {
   try {
+    console.log("🔥 WEBHOOK HIT");
+
     const signature = req.headers['yoco-signature'];
 
     const expectedSignature = crypto
@@ -246,13 +247,20 @@ app.post('/webhook/yoco', async (req, res) => {
       .digest('hex');
 
     if (signature !== expectedSignature) {
+      console.log("❌ INVALID SIGNATURE");
       return res.sendStatus(400);
     }
 
     const event = JSON.parse(req.body.toString());
 
+    console.log("📦 EVENT:", event);
+
     if (event.type === "payment.succeeded") {
       const orderId = event.data?.metadata?.order_id;
+
+      console.log("💰 PAYMENT SUCCESS:", orderId);
+
+      if (!orderId) return res.sendStatus(400);
 
       await pool.query(
         `UPDATE orders
@@ -260,21 +268,27 @@ app.post('/webhook/yoco', async (req, res) => {
          WHERE id=$1`,
         [orderId]
       );
+
+      console.log("✅ ORDER UPDATED:", orderId);
     }
 
     res.sendStatus(200);
 
   } catch (err) {
-    console.error(err);
+    console.error("❌ WEBHOOK ERROR:", err);
     res.sendStatus(500);
   }
 });
 
 // ==============================
-// FRONTEND
+// FRONTEND (FIXED ONLY HERE)
 // ==============================
 app.use(express.static(path.join(__dirname, 'dist')));
-app.get('*', (req, res) => {
+
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/webhook')) {
+    return next();
+  }
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
