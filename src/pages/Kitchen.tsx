@@ -16,6 +16,9 @@ const Kitchen: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
 
+  // ✅ POPUP STATE
+  const [message, setMessage] = useState("");
+
   const audioRef = useRef<HTMLAudioElement>(
     new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg")
   );
@@ -120,7 +123,7 @@ const Kitchen: React.FC = () => {
 
     } catch (err) {
       console.error("❌ Update failed:", err);
-      alert("Failed to update order");
+      setMessage("Failed to update order"); // ✅ replaced alert
     }
   };
 
@@ -130,6 +133,35 @@ const Kitchen: React.FC = () => {
 
   return (
     <div style={{ padding: 20, fontFamily: "sans-serif", background: "#f4f4f9", minHeight: "100vh" }}>
+
+      {/* ✅ POPUP */}
+      {message && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          background: "rgba(0,0,0,0.4)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999
+        }}>
+          <div style={{
+            background: "white",
+            padding: 20,
+            borderRadius: 10,
+            textAlign: "center",
+            width: 300
+          }}>
+            <img src="/logo.png" alt="logo" style={{ height: 50, marginBottom: 10 }} />
+            <p>{message}</p>
+            <button onClick={() => setMessage("")}>OK</button>
+          </div>
+        </div>
+      )}
+
       <h1 style={{ borderBottom: "2px solid #333" }}>🍳 Kitchen Dashboard</h1>
 
       {/* SOUND */}
@@ -142,8 +174,8 @@ const Kitchen: React.FC = () => {
                 audioRef.current.currentTime = 0;
                 setSoundEnabled(true);
               })
-              .catch(() => alert("Click again to enable sound"));
-          }}
+              .catch(() => setMessage("Click again to enable sound"))} // ✅ replaced alert
+          }
           style={{ marginBottom: 20, padding: 12, background: "#ff9800", color: "white", borderRadius: 8 }}
         >
           🔔 Enable Order Alerts

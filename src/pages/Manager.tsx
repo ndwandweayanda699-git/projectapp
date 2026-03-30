@@ -9,6 +9,9 @@ const Manager: React.FC = () => {
   const [loggedIn, setLoggedIn] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // ✅ ADDED (popup state)
+  const [message, setMessage] = useState("");
+
   // ✅ FIX: consistent token handling
   const getToken = () => localStorage.getItem("admin_token");
 
@@ -41,16 +44,16 @@ const Manager: React.FC = () => {
       const data = await res.json();
 
       if (res.ok) {
-        // ✅ FIX: correct key
         localStorage.setItem("admin_token", data.token);
         setLoggedIn(true);
         fetchOrders();
         fetchMenu();
       } else {
-        alert(data.error || "Wrong password");
+        // ❌ alert → ✅ popup
+        setMessage(data.error || "Wrong password");
       }
     } catch {
-      alert("Server error");
+      setMessage("Server error");
     }
   };
 
@@ -115,7 +118,7 @@ const Manager: React.FC = () => {
   }, []);
 
   // ==============================
-  // 🔄 TOGGLE MENU ITEM (🔥 FIXED)
+  // 🔄 TOGGLE MENU ITEM
   // ==============================
   const toggleItem = async (id: number) => {
     try {
@@ -128,15 +131,14 @@ const Manager: React.FC = () => {
 
       if (!res.ok) {
         console.error("Toggle failed:", data);
-        alert(data.error || "Toggle failed");
+        setMessage(data.error || "Toggle failed");
         return;
       }
 
-      // ✅ refresh UI
       fetchMenu();
     } catch (err) {
       console.error("Toggle error:", err);
-      alert("Toggle failed");
+      setMessage("Toggle failed");
     }
   };
 
@@ -154,14 +156,14 @@ const Manager: React.FC = () => {
       });
 
       if (!res.ok) {
-        alert("Delete failed");
+        setMessage("Delete failed");
         return;
       }
 
       fetchOrders();
     } catch (err) {
       console.error("Delete failed:", err);
-      alert("Delete failed");
+      setMessage("Delete failed");
     }
   };
 
@@ -198,6 +200,35 @@ const Manager: React.FC = () => {
   if (!loggedIn) {
     return (
       <div style={{ textAlign: "center", marginTop: 100 }}>
+
+        {/* ✅ POPUP */}
+        {message && (
+          <div style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999
+          }}>
+            <div style={{
+              background: "white",
+              padding: 20,
+              borderRadius: 10,
+              textAlign: "center",
+              width: 300
+            }}>
+              <img src="/logo.png" alt="logo" style={{ height: 50, marginBottom: 10 }} />
+              <p>{message}</p>
+              <button onClick={() => setMessage("")}>OK</button>
+            </div>
+          </div>
+        )}
+
         <h1>Manager Login</h1>
 
         <input
@@ -225,41 +256,63 @@ const Manager: React.FC = () => {
 
   return (
     <div style={{ padding: 30, maxWidth: 900, margin: "0 auto" }}>
+
+      {/* ✅ POPUP */}
+      {message && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          background: "rgba(0,0,0,0.4)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999
+        }}>
+          <div style={{
+            background: "white",
+            padding: 20,
+            borderRadius: 10,
+            textAlign: "center",
+            width: 300
+          }}>
+            <img src="/logo.png" alt="logo" style={{ height: 50, marginBottom: 10 }} />
+            <p>{message}</p>
+            <button onClick={() => setMessage("")}>OK</button>
+          </div>
+        </div>
+      )}
+
       <h1>📊 Manager Dashboard</h1>
 
       <button onClick={handleLogout}>Logout</button>
 
-      {/* 💰 REVENUE */}
-      <div
-        style={{
-          background: "green",
-          color: "white",
-          padding: 20,
-          borderRadius: 10,
-          marginTop: 20,
-        }}
-      >
+      <div style={{
+        background: "green",
+        color: "white",
+        padding: 20,
+        borderRadius: 10,
+        marginTop: 20,
+      }}>
         <h2>Revenue: R{totalPaidRevenue.toFixed(2)}</h2>
       </div>
 
-      {/* 🍔 MENU CONTROL */}
       <h2 style={{ marginTop: 30 }}>🍔 Menu Control</h2>
 
       {menu.length === 0 ? (
         <p>No menu items found</p>
       ) : (
         menu.map((item) => (
-          <div
-            key={item.id}
-            style={{
-              background: "white",
-              padding: 15,
-              marginBottom: 10,
-              borderRadius: 8,
-              display: "flex",
-              justifyContent: "space-between",
-            }}
-          >
+          <div key={item.id} style={{
+            background: "white",
+            padding: 15,
+            marginBottom: 10,
+            borderRadius: 8,
+            display: "flex",
+            justifyContent: "space-between",
+          }}>
             <div>
               <strong>{item.name}</strong> - R{item.price}
             </div>
@@ -279,22 +332,18 @@ const Manager: React.FC = () => {
         ))
       )}
 
-      {/* 📦 PAID ORDERS */}
       <h2 style={{ marginTop: 30 }}>Paid Orders</h2>
 
       {paidOrders.length === 0 ? (
         <p>No paid orders</p>
       ) : (
         paidOrders.map((order) => (
-          <div
-            key={order.id}
-            style={{
-              background: "white",
-              padding: 15,
-              marginBottom: 10,
-              borderRadius: 8,
-            }}
-          >
+          <div key={order.id} style={{
+            background: "white",
+            padding: 15,
+            marginBottom: 10,
+            borderRadius: 8,
+          }}>
             <strong>Order #{order.id}</strong>
             <p>{order.item_ordered}</p>
             <p>R{order.price}</p>

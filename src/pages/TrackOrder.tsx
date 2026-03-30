@@ -76,7 +76,10 @@ const TrackOrder: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: 20, textAlign: "center" }}>
+
+      {/* ✅ LOGO */}
+      <img src="/logo.png" alt="Logo" style={{ height: 80, marginBottom: 20 }} />
 
       <h1>📦 Your Orders</h1>
 

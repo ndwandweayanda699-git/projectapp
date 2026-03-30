@@ -33,7 +33,11 @@ const KitchenLogin: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: 40 }}>
+    <div style={{ padding: 40, textAlign: "center" }}>
+
+      {/* ✅ LOGO */}
+      <img src="/logo.png" alt="Logo" style={{ height: 80, marginBottom: 20 }} />
+
       <h1>🍳 Kitchen Login</h1>
 
       <input
