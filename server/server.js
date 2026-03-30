@@ -6,6 +6,7 @@ const { Pool } = require('pg');
 const jwt = require("jsonwebtoken");
 const path = require('path');
 const crypto = require("crypto");
+const fs = require("fs"); // ✅ ONLY ADDITION
 
 const app = express();
 
@@ -129,7 +130,7 @@ app.put('/api/admin/menu/:id/toggle', verifyAdmin, async (req, res) => {
 });
 
 // ==============================
-// 💳 CREATE PAYMENT (FIXED)
+// 💳 CREATE PAYMENT
 // ==============================
 app.post('/api/pay', async (req, res) => {
   try {
@@ -233,7 +234,7 @@ app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
 });
 
 // ==============================
-// 💳 YOCO WEBHOOK (FIXED)
+// 💳 YOCO WEBHOOK (UNCHANGED)
 // ==============================
 app.post('/webhook/yoco', async (req, res) => {
   try {
@@ -293,16 +294,22 @@ app.post('/webhook/yoco', async (req, res) => {
 });
 
 // ==============================
-// FRONTEND
+// FRONTEND (SAFE FIX)
 // ==============================
-app.use(express.static(path.join(__dirname, 'dist')));
+const distPath = path.join(__dirname, 'dist');
 
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api') || req.path.startsWith('/webhook')) {
-    return next();
-  }
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/webhook')) {
+      return next();
+    }
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+} else {
+  console.log("⚠️ No dist folder found, skipping frontend serving");
+}
 
 // ==============================
 const PORT = process.env.PORT || 5000;
