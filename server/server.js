@@ -233,23 +233,35 @@ app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
 });
 
 // ==============================
-// 💳 YOCO WEBHOOK (DEBUG + SAFE)
+// 💳 YOCO WEBHOOK (FIXED)
 // ==============================
 app.post('/webhook/yoco', async (req, res) => {
   try {
     console.log("🔥 WEBHOOK HIT");
 
-    const signature = req.headers['yoco-signature'];
+    console.log("HEADERS:", req.headers);
+
+    const signature = req.headers['webhook-signature'];
+
+    if (!signature) {
+      console.log("❌ NO SIGNATURE HEADER");
+      return res.sendStatus(400);
+    }
 
     const expectedSignature = crypto
       .createHmac('sha256', YOCO_WEBHOOK_SECRET)
       .update(req.body)
       .digest('hex');
 
+    console.log("Received signature:", signature);
+    console.log("Expected signature:", expectedSignature);
+
     if (signature !== expectedSignature) {
       console.log("❌ INVALID SIGNATURE");
       return res.sendStatus(400);
     }
+
+    console.log("✅ VALID SIGNATURE");
 
     const event = JSON.parse(req.body.toString());
 
@@ -281,7 +293,7 @@ app.post('/webhook/yoco', async (req, res) => {
 });
 
 // ==============================
-// FRONTEND (FIXED ONLY HERE)
+// FRONTEND
 // ==============================
 app.use(express.static(path.join(__dirname, 'dist')));
 
