@@ -37,9 +37,6 @@ const App: React.FC = () => {
   // ✅ NEW POPUP STATE
   const [message, setMessage] = useState<string>("");
 
-  // ==============================
-  // 🍔 FETCH MENU
-  // ==============================
   const fetchMenu = async (): Promise<void> => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/menu`);
@@ -62,16 +59,10 @@ const App: React.FC = () => {
     fetchMenu();
   }, []);
 
-  // ==============================
-  // 🔍 SEARCH
-  // ==============================
   const filteredItems = menu.filter((item) =>
     item.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // ==============================
-  // 🛒 CART
-  // ==============================
   const addToCart = (item: MenuItem): void => {
     setCart((prevCart) => [...prevCart, item]);
   };
@@ -80,9 +71,6 @@ const App: React.FC = () => {
     setCart((prevCart) => prevCart.filter((_, i) => i !== index));
   };
 
-  // ==============================
-  // 💳 PAY (MULTI-ORDER + VALIDATION)
-  // ==============================
   const handlePlaceOrder = async (): Promise<void> => {
     if (loading) return;
 
@@ -167,9 +155,6 @@ const App: React.FC = () => {
     }
   };
 
-  // ==============================
-  // ✅ TRACK BUTTON
-  // ==============================
   const handleTrackOrder = () => {
     const orders = JSON.parse(localStorage.getItem("orders") || "[]");
 
@@ -188,6 +173,10 @@ const App: React.FC = () => {
       {message && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl shadow-lg text-center max-w-sm w-full">
+
+            {/* ✅ LOGO IN POPUP */}
+            <img src="/logo.png" alt="Logo" className="mx-auto mb-3 h-12" />
+
             <p className="mb-4">{message}</p>
             <button
               onClick={() => setMessage("")}
@@ -201,6 +190,10 @@ const App: React.FC = () => {
 
       {/* HEADER */}
       <header className="py-16 px-4 text-center bg-white border-b shadow-sm mb-10 relative">
+
+        {/* ✅ LOGO AT TOP */}
+        <img src="/logo.png" alt="Logo" className="mx-auto mb-4 h-20" />
+
         <h1 className="text-4xl font-black">
           Blue <span className="text-blue-600">Plate</span> Special
         </h1>
