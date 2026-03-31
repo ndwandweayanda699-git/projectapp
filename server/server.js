@@ -7,6 +7,7 @@ const jwt = require("jsonwebtoken");
 const path = require('path');
 const crypto = require("crypto");
 const fs = require("fs"); // ✅ ONLY ADDITION
+const { Webhook } = require("svix"); // ✅ ADDED
 
 const app = express();
 
@@ -234,40 +235,37 @@ app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
 });
 
 // ==============================
-// 💳 YOCO WEBHOOK (FIXED ONLY HERE)
+// 💳 YOCO WEBHOOK (FINAL FIX)
 // ==============================
 app.post('/webhook/yoco', async (req, res) => {
   try {
     console.log("🔥 WEBHOOK HIT");
-
     console.log("HEADERS:", req.headers);
 
-    const signatureHeader = req.headers['webhook-signature'];
+    const payload = req.body;
 
-    if (!signatureHeader) {
-      console.log("❌ NO SIGNATURE HEADER");
+    const headers = {
+      "webhook-id": req.headers["webhook-id"],
+      "webhook-timestamp": req.headers["webhook-timestamp"],
+      "webhook-signature": req.headers["webhook-signature"],
+    };
+
+    if (!headers["webhook-id"] || !headers["webhook-signature"]) {
+      console.log("❌ Missing Svix headers");
       return res.sendStatus(400);
     }
 
-    // ✅ FIX: extract base64 signature
-    const signature = signatureHeader.split(",")[1];
+    const wh = new Webhook(YOCO_WEBHOOK_SECRET);
 
-    const expectedSignature = crypto
-      .createHmac('sha256', YOCO_WEBHOOK_SECRET)
-      .update(req.body)
-      .digest('base64');
+    let event;
 
-    console.log("Received signature:", signature);
-    console.log("Expected signature:", expectedSignature);
-
-    if (signature !== expectedSignature) {
-      console.log("❌ INVALID SIGNATURE");
+    try {
+      event = wh.verify(payload, headers);
+      console.log("✅ SIGNATURE VERIFIED");
+    } catch (err) {
+      console.log("❌ INVALID SIGNATURE", err.message);
       return res.sendStatus(400);
     }
-
-    console.log("✅ VALID SIGNATURE");
-
-    const event = JSON.parse(req.body.toString());
 
     console.log("📦 EVENT:", event);
 
