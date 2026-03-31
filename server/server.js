@@ -270,7 +270,7 @@ app.post('/webhook/yoco', async (req, res) => {
     console.log("📦 EVENT:", event);
 
     if (event.type === "payment.succeeded") {
-      const orderId = event.data?.metadata?.order_id;
+      const orderId = event.payload?.metadata?.order_id; // ✅ FIXED HERE
 
       console.log("💰 PAYMENT SUCCESS:", orderId);
 
