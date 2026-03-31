@@ -234,7 +234,7 @@ app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
 });
 
 // ==============================
-// 💳 YOCO WEBHOOK (UNCHANGED)
+// 💳 YOCO WEBHOOK (FIXED ONLY HERE)
 // ==============================
 app.post('/webhook/yoco', async (req, res) => {
   try {
@@ -242,17 +242,20 @@ app.post('/webhook/yoco', async (req, res) => {
 
     console.log("HEADERS:", req.headers);
 
-    const signature = req.headers['webhook-signature'];
+    const signatureHeader = req.headers['webhook-signature'];
 
-    if (!signature) {
+    if (!signatureHeader) {
       console.log("❌ NO SIGNATURE HEADER");
       return res.sendStatus(400);
     }
 
+    // ✅ FIX: extract base64 signature
+    const signature = signatureHeader.split(",")[1];
+
     const expectedSignature = crypto
       .createHmac('sha256', YOCO_WEBHOOK_SECRET)
       .update(req.body)
-      .digest('hex');
+      .digest('base64');
 
     console.log("Received signature:", signature);
     console.log("Expected signature:", expectedSignature);
