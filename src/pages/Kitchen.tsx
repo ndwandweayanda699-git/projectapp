@@ -174,7 +174,8 @@ const Kitchen: React.FC = () => {
                 audioRef.current.currentTime = 0;
                 setSoundEnabled(true);
               })
-              .catch(() => setMessage("Click again to enable sound"))}
+              .catch(() => setMessage("Click again to enable sound"));
+          }}   {/* ✅ FIXED: closed function properly */}
           style={{ marginBottom: 20, padding: 12, background: "#ff9800", color: "white", borderRadius: 8 }}
         >
           🔔 Enable Order Alerts
