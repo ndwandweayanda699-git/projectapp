@@ -8,6 +8,10 @@ const TrackOrder: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState("");
   const [status, setStatus] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
+
+  // ✅ ADDED (kitchen status)
+  const [deliveryStatus, setDeliveryStatus] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -35,6 +39,9 @@ const TrackOrder: React.FC = () => {
     setStatus("");
     setPaymentStatus("");
 
+    // ✅ ADDED
+    setDeliveryStatus("");
+
     try {
       const res = await fetch(
         `${BACKEND_URL}/api/track/${orderNumber}`
@@ -50,6 +57,9 @@ const TrackOrder: React.FC = () => {
 
       setStatus(data.status);
       setPaymentStatus(data.payment_status);
+
+      // ✅ ADDED
+      setDeliveryStatus(data.delivery_status);
 
     } catch (err) {
       console.error(err);
@@ -69,10 +79,19 @@ const TrackOrder: React.FC = () => {
   }, [selectedOrder]);
 
   const getStatusColor = () => {
-    if (status === "preparing") return "orange";
-    if (status === "ready") return "green";
-    if (status === "pending") return "gray";
+    if (deliveryStatus === "preparing") return "orange";
+    if (deliveryStatus === "ready") return "green";
+    if (deliveryStatus === "done") return "green";
+    if (deliveryStatus === "pending") return "gray";
     return "black";
+  };
+
+  // ✅ ADDED (friendly labels)
+  const getKitchenLabel = () => {
+    if (deliveryStatus === "pending") return "🟡 Order received";
+    if (deliveryStatus === "preparing") return "👨‍🍳 Preparing your food";
+    if (deliveryStatus === "ready" || deliveryStatus === "done") return "✅ Ready for collection";
+    return deliveryStatus;
   };
 
   return (
@@ -114,10 +133,20 @@ const TrackOrder: React.FC = () => {
           {status && (
             <>
               <p>Payment: <strong>{paymentStatus}</strong></p>
+
+              {/* ORIGINAL (UNCHANGED) */}
               <p>
                 Status:{" "}
-                <strong style={{ color: getStatusColor() }}>
+                <strong>
                   {status}
+                </strong>
+              </p>
+
+              {/* ✅ IMPROVED DISPLAY (same logic, better UX) */}
+              <p>
+                Kitchen:{" "}
+                <strong style={{ color: getStatusColor() }}>
+                  {getKitchenLabel()}
                 </strong>
               </p>
             </>
@@ -133,6 +162,9 @@ const TrackOrder: React.FC = () => {
           setSelectedOrder("");
           setStatus("");
           setPaymentStatus("");
+
+          // ✅ ADDED
+          setDeliveryStatus("");
         }}
         style={{
           marginTop: 20,

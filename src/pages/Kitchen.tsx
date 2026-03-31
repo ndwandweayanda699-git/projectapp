@@ -123,13 +123,13 @@ const Kitchen: React.FC = () => {
 
     } catch (err) {
       console.error("❌ Update failed:", err);
-      setMessage("Failed to update order"); // ✅ replaced alert
+      setMessage("Failed to update order");
     }
   };
 
   // 📊 FILTERS
-  const activeOrders = orders.filter((o) => o.delivery_status !== "ready");
-  const completedOrders = orders.filter((o) => o.delivery_status === "ready");
+  const activeOrders = orders.filter((o) => o.delivery_status !== "done");
+  const completedOrders = orders.filter((o) => o.delivery_status === "done");
 
   return (
     <div style={{ padding: 20, fontFamily: "sans-serif", background: "#f4f4f9", minHeight: "100vh" }}>
@@ -174,8 +174,7 @@ const Kitchen: React.FC = () => {
                 audioRef.current.currentTime = 0;
                 setSoundEnabled(true);
               })
-              .catch(() => setMessage("Click again to enable sound"))} // ✅ replaced alert
-          }
+              .catch(() => setMessage("Click again to enable sound"))}
           style={{ marginBottom: 20, padding: 12, background: "#ff9800", color: "white", borderRadius: 8 }}
         >
           🔔 Enable Order Alerts
@@ -210,16 +209,59 @@ const Kitchen: React.FC = () => {
 
           <p>
             Status:{" "}
-            <strong style={{ color: order.delivery_status === "preparing" ? "blue" : "gray" }}>
+            <strong style={{
+              color:
+                order.delivery_status === "preparing" ? "orange" :
+                order.delivery_status === "ready" ? "green" :
+                order.delivery_status === "done" ? "green" :
+                "gray"
+            }}>
               {order.delivery_status || "pending"}
             </strong>
           </p>
 
-          <button onClick={() => updateStatus(order.id, "preparing")}>
+          {/* ✅ IMPROVED BUTTONS */}
+          <button
+            onClick={() => updateStatus(order.id, "preparing")}
+            disabled={order.delivery_status === "preparing"}
+            style={{
+              marginRight: 10,
+              padding: "8px 12px",
+              background: "orange",
+              color: "white",
+              borderRadius: 6,
+              opacity: order.delivery_status === "preparing" ? 0.5 : 1
+            }}
+          >
             Start
           </button>
 
-          <button onClick={() => updateStatus(order.id, "ready")}>
+          <button
+            onClick={() => updateStatus(order.id, "ready")}
+            disabled={order.delivery_status === "ready"}
+            style={{
+              marginRight: 10,
+              padding: "8px 12px",
+              background: "green",
+              color: "white",
+              borderRadius: 6,
+              opacity: order.delivery_status === "ready" ? 0.5 : 1
+            }}
+          >
+            Ready
+          </button>
+
+          <button
+            onClick={() => updateStatus(order.id, "done")}
+            disabled={order.delivery_status === "done"}
+            style={{
+              padding: "8px 12px",
+              background: "#333",
+              color: "white",
+              borderRadius: 6,
+              opacity: order.delivery_status === "done" ? 0.5 : 1
+            }}
+          >
             Done
           </button>
         </div>
@@ -231,7 +273,7 @@ const Kitchen: React.FC = () => {
           <h2>✅ Completed</h2>
           {completedOrders.map((order) => (
             <div key={order.id}>
-              Order #{order.id} - Ready
+              Order #{order.id} - Done 🎉
             </div>
           ))}
         </>
