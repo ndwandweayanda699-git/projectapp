@@ -183,12 +183,12 @@ app.post('/api/pay', async (req, res) => {
 });
 
 // ==============================
-// 📦 TRACK ORDER
+// 📦 TRACK ORDER (✅ ONLY CHANGE HERE)
 // ==============================
 app.get('/api/track/:orderNumber', async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT order_number, status, payment_status FROM orders WHERE order_number = $1",
+      "SELECT order_number, status, payment_status, delivery_status FROM orders WHERE order_number = $1",
       [req.params.orderNumber]
     );
 
@@ -235,7 +235,22 @@ app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
 });
 
 // ==============================
-// 💳 YOCO WEBHOOK (FINAL FIX)
+// 📊 ADMIN FETCH ORDERS (ONLY ADDITION)
+// ==============================
+app.get('/api/orders', verifyAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM orders ORDER BY id DESC"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch orders error:", err);
+    res.status(500).json({ error: "Failed to fetch orders" });
+  }
+});
+
+// ==============================
+// 💳 YOCO WEBHOOK (UNCHANGED)
 // ==============================
 app.post('/webhook/yoco', async (req, res) => {
   try {
@@ -270,7 +285,7 @@ app.post('/webhook/yoco', async (req, res) => {
     console.log("📦 EVENT:", event);
 
     if (event.type === "payment.succeeded") {
-      const orderId = event.payload?.metadata?.order_id; // ✅ FIXED HERE
+      const orderId = event.payload?.metadata?.order_id;
 
       console.log("💰 PAYMENT SUCCESS:", orderId);
 
