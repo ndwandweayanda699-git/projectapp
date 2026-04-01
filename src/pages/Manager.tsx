@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 
-const BACKEND_URL = "https://onrender.com";
+const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com"; // ✅ FIXED (ONLY CHANGE)
 
 const Manager: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
@@ -150,7 +150,6 @@ const Manager: React.FC = () => {
     if (!confirmDelete) return;
 
     try {
-      // THE ONLY UPDATE: Changed URL to include /admin/ to match your backend route
       const res = await fetch(`${BACKEND_URL}/api/admin/orders/${orderId}`, {
         method: "DELETE",
         headers: getHeaders(),

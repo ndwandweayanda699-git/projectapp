@@ -270,9 +270,9 @@ app.get('/api/orders', verifyAdmin, async (req, res) => {
 });
 
 // ==============================
-// ❌ DELETE ORDER (ADMIN ONLY) ✅ UPDATED ROUTE
+// ❌ DELETE ORDER (ADMIN ONLY) ✅ ADDED
 // ==============================
-app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
+app.delete('/api/admin/orders/:id', verifyAdmin, async (req, res) => {
   try {
     console.log("🗑️ DELETE ORDER:", req.params.id);
 
@@ -287,4 +287,81 @@ app.delete('/api/orders/:id', verifyAdmin, async (req, res) => {
     console.error("❌ Delete order error:", err);
     res.status(500).json({ error: "Delete order failed" });
   }
+});
+
+// ==============================
+// 💳 YOCO WEBHOOK (UNCHANGED)
+// ==============================
+app.post('/webhook/yoco', async (req, res) => {
+  try {
+    console.log("🔥 WEBHOOK HIT");
+    console.log("HEADERS:", req.headers);
+
+    const payload = req.body;
+
+    const headers = {
+      "webhook-id": req.headers["webhook-id"],
+      "webhook-timestamp": req.headers["webhook-timestamp"],
+      "webhook-signature": req.headers["webhook-signature"],
+    };
+
+    if (!headers["webhook-id"] || !headers["webhook-signature"]) {
+      console.log("❌ Missing Svix headers");
+      return res.sendStatus(400);
+    }
+
+    const wh = new Webhook(YOCO_WEBHOOK_SECRET);
+
+    let event;
+
+    try {
+      event = wh.verify(payload, headers);
+      console.log("✅ SIGNATURE VERIFIED");
+    } catch (err) {
+      console.log("❌ INVALID SIGNATURE", err.message);
+      return res.sendStatus(400);
+    }
+
+    console.log("📦 EVENT:", event);
+
+    if (event.type === "payment.succeeded") {
+      const orderId = event.payload?.metadata?.order_id;
+
+      if (!orderId) return res.sendStatus(400);
+
+      await pool.query(
+        `UPDATE orders
+         SET payment_status='paid', status='confirmed', delivery_status='pending'
+         WHERE id=$1`,
+        [orderId]
+      );
+    }
+
+    res.sendStatus(200);
+
+  } catch (err) {
+    console.error("❌ WEBHOOK ERROR:", err);
+    res.sendStatus(500);
+  }
+});
+
+// ==============================
+// FRONTEND
+// ==============================
+const distPath = path.join(__dirname, 'dist');
+
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/webhook')) {
+      return next();
+    }
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
