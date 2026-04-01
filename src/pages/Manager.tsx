@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 
-const BACKEND_URL = "https://projectapp-backend-u0fx.onrender.com";
+const BACKEND_URL = "https://onrender.com";
 
 const Manager: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
@@ -150,7 +150,8 @@ const Manager: React.FC = () => {
     if (!confirmDelete) return;
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
+      // THE ONLY UPDATE: Changed URL to include /admin/ to match your backend route
+      const res = await fetch(`${BACKEND_URL}/api/admin/orders/${orderId}`, {
         method: "DELETE",
         headers: getHeaders(),
       });
@@ -316,48 +317,34 @@ const Manager: React.FC = () => {
             <div>
               <strong>{item.name}</strong> - R{item.price}
             </div>
-
-            <button
-              onClick={() => toggleItem(item.id)}
-              style={{
-                background: item.is_available ? "green" : "red",
-                color: "white",
-                padding: "6px 12px",
-                borderRadius: 6,
-              }}
-            >
-              {item.is_available ? "Available" : "Out of Stock"}
+            <button onClick={() => toggleItem(item.id)}>
+              {item.is_available ? "Disable" : "Enable"}
             </button>
           </div>
         ))
       )}
 
-      <h2 style={{ marginTop: 30 }}>Paid Orders</h2>
-
-      {paidOrders.length === 0 ? (
-        <p>No paid orders</p>
+      <h2 style={{ marginTop: 30 }}>📦 Recent Orders</h2>
+      {orders.length === 0 ? (
+        <p>No orders yet</p>
       ) : (
-        paidOrders.map((order) => (
+        orders.map((order) => (
           <div key={order.id} style={{
             background: "white",
             padding: 15,
             marginBottom: 10,
             borderRadius: 8,
+            borderLeft: `5px solid ${order.payment_status === "paid" ? "green" : "red"}`,
           }}>
-            <strong>Order #{order.id}</strong>
-            <p>{order.item_ordered}</p>
-            <p>R{order.price}</p>
-
+            <h3>Order #{order.order_number}</h3>
+            <p><strong>Item:</strong> {order.item_ordered}</p>
+            <p><strong>Price:</strong> R{order.price}</p>
+            <p><strong>Status:</strong> {order.status}</p>
             <button
               onClick={() => deleteOrder(order.id)}
-              style={{
-                background: "red",
-                color: "white",
-                padding: "6px 12px",
-                borderRadius: 6,
-              }}
+              style={{ background: "red", color: "white", marginTop: 10 }}
             >
-              Delete
+              Delete Order
             </button>
           </div>
         ))
@@ -367,3 +354,7 @@ const Manager: React.FC = () => {
 };
 
 export default Manager;
+
+
+
+
