@@ -203,7 +203,7 @@ app.post('/api/pay', async (req, res) => {
 });
 
 // ==============================
-// 📦 TRACK ORDER (✅ ONLY CHANGE HERE)
+// 📦 TRACK ORDER
 // ==============================
 app.get('/api/track/:orderNumber', async (req, res) => {
   try {
@@ -255,7 +255,7 @@ app.get('/api/kitchen/orders', verifyKitchen, async (req, res) => {
 });
 
 // ==============================
-// 📊 ADMIN FETCH ORDERS (ONLY ADDITION)
+// 📊 ADMIN FETCH ORDERS
 // ==============================
 app.get('/api/orders', verifyAdmin, async (req, res) => {
   try {
@@ -266,6 +266,26 @@ app.get('/api/orders', verifyAdmin, async (req, res) => {
   } catch (err) {
     console.error("Fetch orders error:", err);
     res.status(500).json({ error: "Failed to fetch orders" });
+  }
+});
+
+// ==============================
+// ❌ DELETE ORDER (ADMIN ONLY) ✅ ADDED
+// ==============================
+app.delete('/api/admin/orders/:id', verifyAdmin, async (req, res) => {
+  try {
+    console.log("🗑️ DELETE ORDER:", req.params.id);
+
+    await pool.query(
+      "DELETE FROM orders WHERE id = $1",
+      [req.params.id]
+    );
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("❌ Delete order error:", err);
+    res.status(500).json({ error: "Delete order failed" });
   }
 });
 
@@ -307,8 +327,6 @@ app.post('/webhook/yoco', async (req, res) => {
     if (event.type === "payment.succeeded") {
       const orderId = event.payload?.metadata?.order_id;
 
-      console.log("💰 PAYMENT SUCCESS:", orderId);
-
       if (!orderId) return res.sendStatus(400);
 
       await pool.query(
@@ -317,8 +335,6 @@ app.post('/webhook/yoco', async (req, res) => {
          WHERE id=$1`,
         [orderId]
       );
-
-      console.log("✅ ORDER UPDATED:", orderId);
     }
 
     res.sendStatus(200);
@@ -330,7 +346,7 @@ app.post('/webhook/yoco', async (req, res) => {
 });
 
 // ==============================
-// FRONTEND (SAFE FIX)
+// FRONTEND
 // ==============================
 const distPath = path.join(__dirname, 'dist');
 
@@ -343,11 +359,8 @@ if (fs.existsSync(distPath)) {
     }
     res.sendFile(path.join(distPath, 'index.html'));
   });
-} else {
-  console.log("⚠️ No dist folder found, skipping frontend serving");
 }
 
-// ==============================
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
