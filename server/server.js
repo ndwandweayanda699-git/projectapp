@@ -131,6 +131,26 @@ app.put('/api/admin/menu/:id/toggle', verifyAdmin, async (req, res) => {
 });
 
 // ==============================
+// ❌ DELETE MENU ITEM (ADDED)
+// ==============================
+app.delete('/api/admin/menu/:id', verifyAdmin, async (req, res) => {
+  try {
+    console.log("🗑️ DELETE REQUEST:", req.params.id);
+
+    await pool.query(
+      "DELETE FROM menu_items WHERE id = $1",
+      [req.params.id]
+    );
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("❌ Delete error:", err);
+    res.status(500).json({ error: "Delete failed" });
+  }
+});
+
+// ==============================
 // 💳 CREATE PAYMENT
 // ==============================
 app.post('/api/pay', async (req, res) => {
